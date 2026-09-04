@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A Game of Chromes - The Iron Shortcut Trainer</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
+</head>
+<body>
+  <!-- Ambient Ember Particle Canvas -->
+  <canvas id="emberCanvas"></canvas>
+
+  <div class="app-container">
+    <!-- Top Realm Navigation & Stats Bar -->
+    <header class="realm-header">
+      <div class="brand-section">
+        <span class="brand-crest">🐉</span>
+        <div class="brand-title-group">
+          <h1>A GAME OF CHROMES</h1>
+          <p class="brand-subtitle">House of the Shortcut • Defenders of the Iron Browser</p>
+        </div>
+      </div>
+
+      <!-- Stats Bar (Rank, XP, Fire Streak) -->
+      <div class="header-stats">
+        <!-- Daily Streak Tracker -->
+        <div class="stat-box streak-active" id="streakBox" title="Daily Battle Streak">
+          <span class="stat-icon">🔥</span>
+          <div class="stat-content">
+            <span class="stat-label">Fire Streak</span>
+            <span class="stat-value" id="streakValue">1 Day</span>
+          </div>
+        </div>
+
+        <!-- Rank Display -->
+        <div class="stat-box" id="rankBox" title="Current Feudal Rank">
+          <span class="stat-icon">👑</span>
+          <div class="stat-content">
+            <span class="stat-label">Feudal Rank</span>
+            <span class="stat-value" id="currentRankName">Noob of the Cursor</span>
+          </div>
+        </div>
+
+        <!-- Combo Indicator -->
+        <div class="combo-indicator" id="comboIndicator" data-combo="0" title="Current Combo Streak">
+          ⚡ <span id="comboValue">0x</span>
+        </div>
+
+        <!-- System Controls -->
+        <div class="header-controls">
+          <button class="os-toggle-btn" id="statsBtn" title="Open Performance Stats & Achievements">
+            📊 Stats
+          </button>
+          <button class="os-toggle-btn armor-btn" id="armorToggleBtn" title="Locks Ctrl+W & Tab shortcuts from closing the browser window using Fullscreen Armor">
+            🛡️ Fullscreen Mode
+          </button>
+          <button class="os-toggle-btn" id="popupWindowBtn" title="Launch in dedicated App window">
+            🪟 App Window
+          </button>
+          <button class="os-toggle-btn" id="osToggleBtn" title="Switch Operating System Keymap">
+            🪟 Windows (Ctrl)
+          </button>
+          <button class="audio-toggle-btn" id="audioToggleBtn" title="Toggle Realm Audio Synthesizer">
+            🔊 Audio
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- XP Progression Track Banner -->
+    <section class="xp-banner" aria-label="XP Progression">
+      <div class="xp-banner-info">
+        <span>⚔️ <strong>FEUDAL XP PROGRESSION</strong></span>
+        <span class="xp-fraction" id="xpFraction">0 / 100 XP</span>
+      </div>
+      <div class="xp-bar-track">
+        <div class="xp-bar-fill" id="xpFill"></div>
+      </div>
+    </section>
+
+    <!-- Full-Width Main Battleground: Command Deck Above, Full-Size Browser Simulator Below -->
+    <main class="main-battleground">
+      
+      <!-- QUEST COMMAND DECK (Cleanly positioned above the simulator - completely unobstructed) -->
+      <section class="quest-command-deck" id="questCommandDeck" aria-label="Current Quest Console">
+        <!-- Left: Quest Details & Lore -->
+        <div class="deck-col-info">
+          <div class="quest-header-meta">
+            <span class="quest-badge" id="questBadge">Tab Mastery • Squire</span>
+            <span class="quest-counter" id="questCounter">Quest 1 of 10</span>
+          </div>
+          <h2 class="quest-title" id="questTitle">Slay the Rogue Doge Tab</h2>
+          <div class="quest-lore" id="questLore">
+            "Your RAM is burning at 99%! Close the active tab before Chrome ascends to the shadow realm!"
+          </div>
+          <!-- Combat HUD (Visible in Trial by Combat) -->
+          <div class="sim-hud-status" id="combatHud" style="display: none; background: rgba(163, 22, 33, 0.4); border-color: #e63946;">
+            <span>⏱️ Time Remaining: <strong id="combatTimerDisplay" style="color:#ff8a93">60s</strong></span>
+            <span>⚡ Strike as many shortcuts as thou can!</span>
+          </div>
+        </div>
+
+        <!-- Center: Dynamic Action Box & Keycaps -->
+        <div class="deck-col-action">
+          <div class="target-keys-area">
+            <div class="keys-area-header">
+              <span class="target-keys-label" id="targetKeysLabel">Action: Close Tab</span>
+            </div>
+            <div class="keycaps-display" id="keycapsDisplay">
+              <button class="keycap interactive-keycap">Ctrl</button>
+              <span class="key-plus">+</span>
+              <button class="keycap interactive-keycap">W</button>
+            </div>
+            <div class="quest-feedback" id="questFeedback">
+              Press Ctrl + W (or press W / Alt+W / click keycaps / use Fullscreen mode).
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Tactical Actions & Modes -->
+        <div class="deck-col-controls">
+          <button class="btn-primary strike-blade-btn" id="strikeBtn" title="Trigger the active shortcut immediately">
+            ⚔️ Strike Blade
+          </button>
+          <div class="deck-actions-grid">
+            <button class="btn-secondary" id="skipQuestBtn" title="Next Quest">
+              ⏭️ Skip
+            </button>
+            <button class="btn-secondary" id="openGrimoireBtn" title="Open Grand Grimoire shortcut library">
+              📖 Grimoire
+            </button>
+            <button class="btn-secondary" id="modeBtnCampaign" title="Story-driven progressive trials">
+              📜 Campaign
+            </button>
+            <button class="btn-secondary" id="modeBtnCombat" title="60-second high-speed trial">
+              ⚔️ 60s Combat
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- FULL-WIDTH, FULL-SIZE: The Google Chrome Browser Simulator (100% Unobstructed) -->
+      <section class="simulation-column full-width-sim" aria-label="Google Chrome Browser Simulator">
+        <!-- Mock Browser Frame Container -->
+        <div id="browserSimContainer">
+          <!-- Populated by BrowserSimulator class -->
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer Realm Advice -->
+    <footer class="realm-footer">
+      <div>🛡️ <em>"When you play the Game of Chromes, you win or you browse with the mouse."</em></div>
+      <div>⚡ Full-Width Chrome Simulator • Floating Quest HUD Active</div>
+    </footer>
+  </div>
+
+  <!-- The Grand Grimoire Modal (Shortcut Quick Library) -->
+  <div class="modal-backdrop" id="grimoireModal">
+    <div class="rank-up-card grimoire-modal-card">
+      <div class="grimoire-header">
+        <span class="grimoire-title">📖 The Grand Grimoire of Shortcuts</span>
+        <button class="drawer-close-btn" id="closeGrimoireBtn">✕</button>
+      </div>
+      <p style="font-size:0.8rem; color:#94a3b8; margin-top:-0.5rem;">Click any shortcut below to practice it immediately:</p>
+      <div class="grimoire-list" id="grimoireList">
+        <!-- Populated via JavaScript -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Initial Fullscreen Entry Modal (Shown when user opens app) -->
+  <div class="modal-backdrop show" id="welcomeModal">
+    <div class="rank-up-card welcome-card">
+      <div class="rank-crest-large">🐉</div>
+      <h2 class="rank-up-title">ENTER THE IRON ARENA</h2>
+      <p class="rank-up-desc">
+        To prevent Google Chrome from closing your browser tab during <strong>Ctrl + W</strong> quests, enter Fullscreen Battle Mode now!
+      </p>
+      <div class="modal-actions-row">
+        <button class="btn-primary modal-action-btn" id="welcomeFullscreenBtn">
+          🛡️ Enter Fullscreen Mode <span class="enter-key-badge">↵ Enter</span>
+        </button>
+        <button class="btn-secondary modal-action-btn" id="welcomeWindowedBtn">
+          🗡️ Continue Windowed <span class="enter-key-badge">Esc</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feudal Rank & Prize Promotion Modal -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="rank-up-card">
+      <div class="rank-crest-large" id="modalCrest">👑</div>
+      <h2 class="rank-up-title" id="modalTitle">PROMOTED: Lord of the Lattice!</h2>
+      <p class="rank-up-desc" id="modalDesc">
+        By Royal Decree, your mastery of Chrome shortcuts has ascended to a new height!
+      </p>
+      <button class="btn-primary modal-action-btn" id="modalCloseBtn" style="min-width: 240px;">
+        Claim Honor <span class="enter-key-badge">↵ Enter</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Achievement Toast Notification Container -->
+  <div class="achievement-toast-container" id="achievementToastContainer"></div>
+
+  <!-- Stats & Achievements Dashboard Modal -->
+  <div class="modal-backdrop" id="statsModal">
+    <div class="rank-up-card stats-modal-card">
+      <div class="grimoire-header" style="border-bottom: 1px solid rgba(212, 175, 55, 0.3); padding-bottom: 0.5rem;">
+        <span class="grimoire-title">📊 War Room — Stats & Achievements</span>
+        <button class="drawer-close-btn" id="closeStatsBtn">✕</button>
+      </div>
+
+      <!-- Performance Metrics Grid -->
+      <div class="stats-grid" id="statsGrid">
+        <div class="stats-metric">
+          <span class="stats-metric-value" id="statTotalXP">0</span>
+          <span class="stats-metric-label">Total XP</span>
+        </div>
+        <div class="stats-metric">
+          <span class="stats-metric-value" id="statAccuracy">0%</span>
+          <span class="stats-metric-label">Accuracy</span>
+        </div>
+        <div class="stats-metric">
+          <span class="stats-metric-value" id="statAvgReaction">—</span>
+          <span class="stats-metric-label">Avg Reaction</span>
+        </div>
+        <div class="stats-metric">
+          <span class="stats-metric-value" id="statBestStreak">0</span>
+          <span class="stats-metric-label">Best Streak</span>
+        </div>
+        <div class="stats-metric">
+          <span class="stats-metric-value" id="statMastered">0</span>
+          <span class="stats-metric-label">Mastered</span>
+        </div>
+        <div class="stats-metric">
+          <span class="stats-metric-value" id="statCombatBest">0</span>
+          <span class="stats-metric-label">Combat Best</span>
+        </div>
+      </div>
+
+      <!-- Realm Progress -->
+      <div class="realm-progress-section">
+        <h3>⚔️ Realm Mastery Progress</h3>
+        <div class="realm-progress-list" id="realmProgressList">
+          <!-- Populated by JavaScript -->
+        </div>
+      </div>
+
+      <!-- Achievement Trophies -->
+      <div class="trophy-section">
+        <h3>🏆 Achievement Trophies</h3>
+        <div class="trophy-grid" id="trophyGrid">
+          <!-- Populated by JavaScript -->
+        </div>
+      </div>
+
+      <!-- Combat High Scores -->
+      <div class="highscores-section">
+        <h3>⚔️ Combat Trial High Scores</h3>
+        <div class="highscores-list" id="highscoresList">
+          <div class="highscore-item" style="color: #64748b; justify-content: center;">No scores yet — enter Trial by Combat!</div>
+        </div>
+      </div>
+
+      <button class="btn-primary modal-action-btn" id="closeStatsBtn2" style="min-width: 200px; margin-top: 0.5rem;">
+        Return to Battle <span class="enter-key-badge">Esc</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Audio Synthesizer Engine -->
+  <script src="audio.js"></script>
+  <!-- Main Application Logic (ES Module) -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>
