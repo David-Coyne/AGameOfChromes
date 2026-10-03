@@ -45,10 +45,31 @@ function getMasteryLevel(successes) {
   return 0;
 }
 
+function safeParseJSON(raw, fallback) {
+  try {
+    if (raw == null || raw === '') return fallback;
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+function safeInt(raw, fallback = 0) {
+  const n = parseInt(raw ?? String(fallback), 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function localDateString(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 class GameOfChromesApp {
   constructor() {
     this.currentOS = detectOS();
-    this.xp = parseInt(localStorage.getItem('goc_xp') || '0', 10);
+    this.xp = safeInt(localStorage.getItem('goc_xp'), 0);
     this.currentRank = getRankForXP(this.xp);
     this.currentQuestIndex = 0;
     this.combo = 0;
@@ -63,16 +84,20 @@ class GameOfChromesApp {
     // Performance Stats
     this.sessionCorrect = 0;
     this.sessionIncorrect = 0;
+    this.lifetimeCorrect = safeInt(localStorage.getItem('goc_total_correct'), 0);
+    this.lifetimeIncorrect = safeInt(localStorage.getItem('goc_total_incorrect'), 0);
     this.sessionCampaignCorrect = 0; // For perfect run tracking
     this.sessionCampaignTotal = 0;
     this.questStartTime = Date.now();
     this.reactionTimes = [];
     this.speedDemonTimestamps = []; // Track last 5 timestamps for speed demon
-    this.bestStreak = parseInt(localStorage.getItem('goc_best_streak') || '0', 10);
-    this.combatHighScores = JSON.parse(localStorage.getItem('goc_combat_scores') || '[]');
+    this.bestStreak = safeInt(localStorage.getItem('goc_best_streak'), 0);
+    this.combatHighScores = safeParseJSON(localStorage.getItem('goc_combat_scores'), []);
+    if (!Array.isArray(this.combatHighScores)) this.combatHighScores = [];
 
     // Per-shortcut mastery data
-    this.masteryData = JSON.parse(localStorage.getItem('goc_mastery') || '{}');
+    this.masteryData = safeParseJSON(localStorage.getItem('goc_mastery'), {});
+    if (!this.masteryData || typeof this.masteryData !== 'object') this.masteryData = {};
     // Initialize missing shortcuts
     SHORTCUTS.forEach(s => {
       if (!this.masteryData[s.id]) {
@@ -81,7 +106,8 @@ class GameOfChromesApp {
     });
 
     // Unlocked achievements
-    this.unlockedAchievements = new Set(JSON.parse(localStorage.getItem('goc_achievements') || '[]'));
+    const savedAchievements = safeParseJSON(localStorage.getItem('goc_achievements'), []);
+    this.unlockedAchievements = new Set(Array.isArray(savedAchievements) ? savedAchievements : []);
 
     // DOM Elements
     this.dom = {
@@ -159,6 +185,9 @@ class GameOfChromesApp {
     this.renderGrimoire();
     this.updateStatsUI();
     this.updateComboUI();
+    // Campaign is the default mode — reflect that in the mode buttons
+    this.dom.modeBtnCampaign?.classList.add('btn-primary');
+    this.dom.modeBtnCombat?.classList.remove('btn-primary');
   }
 
   // --- Browser Armor & Tab Close Prevention ---
@@ -204,9 +233,11 @@ class GameOfChromesApp {
 
   // --- Streak Tracker ---
   initStreak() {
-    const today = new Date().toISOString().slice(0, 10);
+    // Use local calendar dates — UTC (toISOString) breaks streaks near midnight
+    const today = localDateString();
     const lastDate = localStorage.getItem('goc_last_date');
-    let streak = parseInt(localStorage.getItem('goc_streak') || '1', 10);
+    let streak = safeInt(localStorage.getItem('goc_streak'), 1);
+    if (streak < 1) streak = 1;
 
     if (!lastDate) {
       localStorage.setItem('goc_last_date', today);
@@ -218,7 +249,9 @@ class GameOfChromesApp {
       return streak;
     }
 
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = localDateString(yesterdayDate);
     if (lastDate === yesterday) {
       streak += 1;
       localStorage.setItem('goc_streak', streak.toString());
@@ -506,15 +539,46 @@ class GameOfChromesApp {
         event.stopPropagation();
         this.dom.grimoireModal.classList.remove('show');
         window.soundEngine.playClick();
-        return;
       }
+      // Block quest input while browsing the Grimoire (match other modals)
+      return;
+    }
+
+    // Don't steal keystrokes or count misses while typing in simulator inputs
+    const activeEl = document.activeElement;
+    const tag = activeEl?.tagName;
+    if (
+      activeEl &&
+      (tag === 'INPUT' || tag === 'TEXTAREA' || activeEl.isContentEditable)
+    ) {
+      // Still block dangerous browser accelerators inside inputs
+      const isModifierPressed = event.ctrlKey || event.metaKey || event.altKey;
+      const keyLower = key.toLowerCase();
+      if (isModifierPressed && ['w', 't', 'n'].includes(keyLower)) {
+        try {
+          event.preventDefault();
+          event.stopPropagation();
+        } catch (err) {}
+      }
+      return;
+    }
+
+    // Ignore further scoring while the quest is animating to the next one
+    if (this.isTransitioning) {
+      if (event.ctrlKey || event.metaKey || event.altKey || ['F5', 'F11', 'F12', 'Tab'].includes(key)) {
+        try {
+          event.preventDefault();
+          event.stopPropagation();
+        } catch (err) {}
+      }
+      return;
     }
 
     const isModifierPressed = event.ctrlKey || event.metaKey || event.altKey;
     const activeQuest = this.getCurrentQuest();
     const isTargetMatch = matchesShortcut(event, activeQuest, this.currentOS);
 
-    const restrictedKeys = ['w', 't', 'l', 'd', 'h', 'j', 'f', 'r', 'n', 's', 'p', 'u', 'b', 'e', 'm', 'c', 'tab', 'arrowright', 'arrowleft', '+', '-', '=', '0', '1', 'delete'];
+    const restrictedKeys = ['w', 't', 'l', 'd', 'h', 'j', 'f', 'r', 'n', 's', 'p', 'u', 'b', 'e', 'm', 'c', 'tab', 'arrowright', 'arrowleft', '+', '-', '=', '0', '1', 'delete', 'backspace', 'y', '[', ']'];
     const keyLower = key.toLowerCase();
 
     // Prevent default browser accelerator actions
@@ -545,10 +609,7 @@ class GameOfChromesApp {
         event.stopPropagation();
         event.stopImmediatePropagation();
       } catch (e) {}
-      // BUG FIX: Guard against rapid-mash exploit during transition
-      if (!this.isTransitioning) {
-        this.handleSuccessStrike(activeQuest);
-      }
+      this.handleSuccessStrike(activeQuest);
     } else if (
       (isModifierPressed || ['F5', 'F11', 'F12'].includes(key)) &&
       key !== 'Control' && key !== 'Meta' && key !== 'Shift' && key !== 'Alt'
@@ -579,7 +640,7 @@ class GameOfChromesApp {
       if (text === 'tab' && event.key === 'Tab') match = true;
       if (text === '+' && (event.key === '+' || event.key === '=')) match = true;
       if (text === '−' && (event.key === '-' || event.key === '_')) match = true;
-      if (text === 'delete' && (event.key === 'Delete' || event.key === 'Backspace')) match = true;
+      if ((text === 'delete' || text === 'backspace') && (event.key === 'Delete' || event.key === 'Backspace')) match = true;
       if (text === 'f5' && event.key === 'F5') match = true;
       if (text === 'f11' && event.key === 'F11') match = true;
       if (text === 'f12' && event.key === 'F12') match = true;
@@ -609,8 +670,9 @@ class GameOfChromesApp {
     if (this.speedDemonTimestamps.length > 5) this.speedDemonTimestamps.shift();
 
     // 1. Audio Fanfare (combo escalation)
-    if (this.combo >= 3) {
-      window.soundEngine.playComboStrike?.(this.combo) || window.soundEngine.playSwordClash();
+    // Note: optional-call returns undefined, so never chain with || (that double-plays)
+    if (this.combo >= 3 && typeof window.soundEngine.playComboStrike === 'function') {
+      window.soundEngine.playComboStrike(this.combo);
     } else {
       window.soundEngine.playSwordClash();
     }
@@ -618,6 +680,8 @@ class GameOfChromesApp {
     // 2. Combo & Score
     this.combo += 1;
     this.sessionCorrect += 1;
+    this.lifetimeCorrect += 1;
+    localStorage.setItem('goc_total_correct', this.lifetimeCorrect.toString());
     if (this.gameMode === 'campaign') {
       this.sessionCampaignCorrect += 1;
       this.sessionCampaignTotal += 1;
@@ -687,12 +751,25 @@ class GameOfChromesApp {
 
   // --- Failure / Hint Handler ---
   handleFailedStrike(quest) {
+    if (this.isTransitioning) return;
+
     window.soundEngine.playShieldThud();
     this.combo = 0;
     this.sessionIncorrect += 1;
+    this.lifetimeIncorrect += 1;
+    localStorage.setItem('goc_total_incorrect', this.lifetimeIncorrect.toString());
     if (this.gameMode === 'campaign') {
       this.sessionCampaignTotal += 1;
     }
+
+    // Count failed attempts toward mastery tracking
+    if (quest?.id) {
+      const masteryEntry = this.masteryData[quest.id] || { successes: 0, attempts: 0, totalReactionMs: 0 };
+      masteryEntry.attempts += 1;
+      this.masteryData[quest.id] = masteryEntry;
+      this.saveMastery();
+    }
+
     this.updateComboUI();
 
     // Shake Command Deck
@@ -730,6 +807,7 @@ class GameOfChromesApp {
   // --- XP & Rank Progression ---
   addXP(amount) {
     const oldRank = this.currentRank;
+    if (!Number.isFinite(this.xp)) this.xp = 0;
     this.xp += amount;
     localStorage.setItem('goc_xp', this.xp.toString());
 
@@ -791,7 +869,7 @@ class GameOfChromesApp {
     });
 
     const state = {
-      totalCorrect: this.sessionCorrect + parseInt(localStorage.getItem('goc_total_correct') || '0', 10),
+      totalCorrect: this.lifetimeCorrect,
       bestStreak: this.bestStreak,
       speedDemonTriggered,
       realmMastery,
@@ -801,9 +879,6 @@ class GameOfChromesApp {
       perfectRun,
       currentRankNum: this.currentRank.rank
     };
-
-    // Save total correct
-    localStorage.setItem('goc_total_correct', state.totalCorrect.toString());
 
     ACHIEVEMENTS.forEach(ach => {
       if (!this.unlockedAchievements.has(ach.id) && ach.condition(state)) {
@@ -816,8 +891,12 @@ class GameOfChromesApp {
     this.unlockedAchievements.add(achievement.id);
     localStorage.setItem('goc_achievements', JSON.stringify([...this.unlockedAchievements]));
 
-    // Play achievement chime
-    window.soundEngine.playAchievementChime?.() || window.soundEngine.playMagicChime();
+    // Play achievement chime (avoid || fallback double-play when method returns undefined)
+    if (typeof window.soundEngine.playAchievementChime === 'function') {
+      window.soundEngine.playAchievementChime();
+    } else {
+      window.soundEngine.playMagicChime();
+    }
 
     // Show toast notification
     this.showAchievementToast(achievement);
@@ -852,9 +931,9 @@ class GameOfChromesApp {
 
   // --- Stats Dashboard Rendering ---
   renderStatsModal() {
-    // Total stats
-    const totalCorrect = this.sessionCorrect + parseInt(localStorage.getItem('goc_total_correct') || '0', 10);
-    const totalAttempts = totalCorrect + this.sessionIncorrect;
+    // Total stats (lifetime counters — never re-add session totals on top of storage)
+    const totalCorrect = this.lifetimeCorrect;
+    const totalAttempts = this.lifetimeCorrect + this.lifetimeIncorrect;
     const accuracy = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
     const avgReaction = this.reactionTimes.length > 0
       ? Math.round(this.reactionTimes.reduce((a, b) => a + b, 0) / this.reactionTimes.length)
@@ -974,10 +1053,8 @@ class GameOfChromesApp {
   startCombatTrial() {
     this.combatTimeLeft = 60;
     this.combatScore = 0;
-    this.sessionCampaignCorrect = 0;
-    this.sessionCampaignTotal = 0;
+    // Do NOT reset sessionCampaign* here — that wiped perfect-run progress mid-session
 
-    // BUG FIX: combatHud and combatTimerDisplay now properly cached in this.dom
     if (this.dom.combatHud) this.dom.combatHud.style.display = 'flex';
     if (this.dom.combatTimerDisplay) this.dom.combatTimerDisplay.textContent = `${this.combatTimeLeft}s`;
 
@@ -990,6 +1067,7 @@ class GameOfChromesApp {
 
       if (this.combatTimeLeft <= 0) {
         clearInterval(this.combatTimer);
+        this.combatTimer = null;
         this.endCombatTrial();
       }
     }, 1000);
@@ -999,6 +1077,7 @@ class GameOfChromesApp {
 
   stopCombatTrial() {
     clearInterval(this.combatTimer);
+    this.combatTimer = null;
     if (this.dom.combatHud) this.dom.combatHud.style.display = 'none';
   }
 

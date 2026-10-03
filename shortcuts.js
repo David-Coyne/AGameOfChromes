@@ -5,12 +5,20 @@
 
 // OS Detection
 export function detectOS() {
-  const userAgent = window.navigator.userAgent.toLowerCase();
-  const platform = window.navigator.platform?.toLowerCase() || '';
-  if (platform.includes('mac') || userAgent.includes('macintosh') || userAgent.includes('mac os')) {
+  const nav = window.navigator;
+  const userAgent = (nav.userAgent || '').toLowerCase();
+  const platform = (nav.platform || '').toLowerCase();
+  // Prefer userAgentData when available (platform is deprecated / unreliable)
+  const uaDataPlatform = nav.userAgentData?.platform?.toLowerCase?.() || '';
+  if (
+    uaDataPlatform.includes('mac') ||
+    platform.includes('mac') ||
+    userAgent.includes('macintosh') ||
+    userAgent.includes('mac os')
+  ) {
     return 'mac';
   }
-  return 'windows'; // Default to Windows/Linux
+  return 'windows'; // Default to Windows/Linux (Ctrl keymap)
 }
 
 export const REALMS = [
@@ -528,7 +536,21 @@ export function matchesShortcut(event, quest, currentOS) {
 
   const checkKey = (keys) => {
     const targetKeys = Array.isArray(keys) ? keys : [keys];
-    return targetKeys.some(k => k.toLowerCase() === pressedKey || `key${k.toLowerCase()}` === pressedCode);
+    return targetKeys.some(k => {
+      const target = k.toLowerCase();
+      if (target === pressedKey || `key${target}` === pressedCode) return true;
+      // Digit keys report code "Digit0" etc.
+      if (`digit${target}` === pressedCode) return true;
+      // Clear Browsing Data: Mac "Delete" key often emits Backspace
+      if (target === 'delete' && (pressedKey === 'backspace' || pressedCode === 'backspace' || pressedCode === 'delete')) {
+        return true;
+      }
+      // Arrow keys: accept both key name and code
+      if (target.startsWith('arrow') && (pressedKey === target || pressedCode === target)) {
+        return true;
+      }
+      return false;
+    });
   };
 
   // Cross-compatibility tolerance (Ctrl on Mac or Meta on Windows both count as primary modifier)
@@ -543,6 +565,10 @@ export function matchesShortcut(event, quest, currentOS) {
   // Alternatives
   if (quest.id === 'reload_page' && (pressedKey === 'f5' || pressedCode === 'f5') && !primaryModPressed && !shiftPressed && !altPressed) return true;
   if (quest.id === 'open_devtools' && checkKey('i') && primaryModPressed && shiftPressed && !altPressed) return true;
+  // Mac DevTools: Cmd + Option + I
+  if (isMac && quest.id === 'open_devtools' && checkKey('i') && primaryModPressed && altPressed && !shiftPressed) return true;
+  // Mac History also accepts Cmd + H in Chrome (in addition to Cmd + Y)
+  if (isMac && quest.id === 'history_scroll' && checkKey('h') && primaryModPressed && !shiftPressed && !altPressed) return true;
 
   // Determine required modifiers
   const reqPrimary = isMac ? !!req.meta : !!req.ctrl;
@@ -553,7 +579,7 @@ export function matchesShortcut(event, quest, currentOS) {
   if (reqPrimary !== primaryModPressed) return false;
   if (reqAlt !== altPressed) return false;
 
-  // Shift matching, with exception for plus/equal
+  // Shift matching, with exception for plus/equal (Shift may be held to type '+')
   if (reqShift !== shiftPressed) {
     const isPlusReq = Array.isArray(req.key) ? req.key.includes('+') : req.key === '+';
     if (!(isPlusReq && (pressedKey === '+' || pressedKey === '='))) {
