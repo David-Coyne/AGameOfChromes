@@ -2261,7 +2261,7 @@ body {
 .chrome-inspect-layer {
   position: absolute;
   inset: 0;
-  z-index: 40;
+  z-index: 50;
   pointer-events: none;
   background: rgba(8, 12, 24, 0.18);
 }
@@ -2559,20 +2559,31 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 42%;
-  min-height: 160px;
+  height: 46%;
+  min-height: 180px;
   background: #202124;
-  border-top: 1px solid #3c4043;
+  border-top: 2px solid #8ab4f8;
   display: flex;
   flex-direction: column;
-  z-index: 60;
-  animation: dockRise 0.28s ease;
+  z-index: 85;
+  animation: dockRise 0.35s ease;
   font-family: var(--font-mono, ui-monospace, monospace);
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55);
+}
+
+.chrome-devtools-dock.devtools-flash-open {
+  animation: dockRise 0.35s ease, dockGlow 0.9s ease;
 }
 
 @keyframes dockRise {
-  from { transform: translateY(30%); opacity: 0; }
+  from { transform: translateY(40%); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes dockGlow {
+  0% { box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55), 0 0 0 rgba(138, 180, 248, 0); }
+  40% { box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55), 0 0 28px rgba(138, 180, 248, 0.55); }
+  100% { box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55), 0 0 0 rgba(138, 180, 248, 0); }
 }
 
 .devtools-header {

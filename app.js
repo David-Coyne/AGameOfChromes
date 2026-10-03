@@ -78,7 +78,13 @@ const KEYBOARD_LOCK_CODES = [
 ];
 
 // Quests whose primary key Chrome intercepts without Keyboard Lock
-const KEYBOARD_LOCK_QUEST_IDS = new Set(['fullscreen_toggle', 'open_devtools', 'open_downloads']);
+const KEYBOARD_LOCK_QUEST_IDS = new Set([
+  'fullscreen_toggle',
+  'open_devtools',
+  'open_downloads',
+  'open_console',
+  'inspect_element'
+]);
 
 class GameOfChromesApp {
   constructor() {
@@ -278,6 +284,12 @@ class GameOfChromesApp {
       if (quest.id === 'open_downloads') {
         return 'Keyboard Lock armed — press Ctrl+J (or Cmd+Shift+J) to open Downloads.';
       }
+      if (quest.id === 'open_console') {
+        return 'Keyboard Lock armed — press Ctrl+Shift+J (Mac: Cmd+Option+J) for Console.';
+      }
+      if (quest.id === 'inspect_element') {
+        return 'Keyboard Lock armed — press Ctrl+Shift+C (Mac: Cmd+Option+C) to Inspect.';
+      }
       return 'Keyboard Lock armed — press F12 now (or Ctrl+Shift+I).';
     }
     if (quest.id === 'fullscreen_toggle') {
@@ -285,6 +297,12 @@ class GameOfChromesApp {
     }
     if (quest.id === 'open_downloads') {
       return 'Enter Fullscreen Mode to capture Ctrl+J (Chrome steals it for chrome://downloads otherwise). Or click Strike Blade / keycaps.';
+    }
+    if (quest.id === 'open_console') {
+      return 'Enter Fullscreen Mode to capture Ctrl+Shift+J (Chrome steals it for Console otherwise). Or click Strike Blade.';
+    }
+    if (quest.id === 'inspect_element') {
+      return 'Enter Fullscreen Mode to capture Ctrl+Shift+C (Chrome steals it for Inspect otherwise). Or click Strike Blade.';
     }
     return 'Enter Fullscreen Mode to capture F12 (Chrome steals F12 for DevTools otherwise). Or use Ctrl+Shift+I.';
   }
@@ -677,7 +695,12 @@ class GameOfChromesApp {
 
     // Ignore further scoring while the quest is animating to the next one
     if (this.isTransitioning) {
-      if (event.ctrlKey || event.metaKey || event.altKey || ['F5', 'F11', 'F12', 'Tab'].includes(key)) {
+      const code = event.code || '';
+      if (
+        event.ctrlKey || event.metaKey || event.altKey ||
+        ['F5', 'F11', 'F12', 'Tab'].includes(key) ||
+        ['F5', 'F11', 'F12', 'Tab'].includes(code)
+      ) {
         try {
           event.preventDefault();
           event.stopPropagation();
@@ -689,6 +712,9 @@ class GameOfChromesApp {
     const isModifierPressed = event.ctrlKey || event.metaKey || event.altKey;
     const activeQuest = this.getCurrentQuest();
     const isTargetMatch = matchesShortcut(event, activeQuest, this.currentOS);
+    const code = event.code || '';
+    const isTrainerFunctionKey =
+      ['F5', 'F11', 'F12'].includes(key) || ['F5', 'F11', 'F12'].includes(code);
 
     const restrictedKeys = ['w', 't', 'l', 'd', 'h', 'j', 'f', 'r', 'n', 's', 'p', 'u', 'b', 'e', 'm', 'c', 'tab', 'arrowright', 'arrowleft', '+', '-', '=', '0', '1', 'delete', 'backspace', 'y', '[', ']'];
     const keyLower = key.toLowerCase();
@@ -705,22 +731,17 @@ class GameOfChromesApp {
     }
 
     // Function keys Chrome owns unless Keyboard Lock is armed in JS fullscreen
-    if (['F5', 'F11', 'F12'].includes(key)) {
+    if (isTrainerFunctionKey) {
       try {
         event.preventDefault();
         event.stopPropagation();
-        // stopImmediatePropagation only helps once Chromium actually delivers the event
         if (this.keyboardLockActive) {
           event.stopImmediatePropagation();
         }
       } catch (err) {}
 
-      // If this is an F11/F12 quest but lock is not armed, steer the player clearly
-      if (
-        !this.keyboardLockActive &&
-        KEYBOARD_LOCK_QUEST_IDS.has(activeQuest?.id) &&
-        !isTargetMatch
-      ) {
+      // Without lock: if F12/F11 never "matches" due to odd event shapes, still hint
+      if (!this.keyboardLockActive && KEYBOARD_LOCK_QUEST_IDS.has(activeQuest?.id) && !isTargetMatch) {
         const hint = this.getReservedKeyHint(activeQuest);
         if (hint) {
           this.dom.questFeedback.textContent = `🛡️ ${hint}`;
@@ -740,7 +761,7 @@ class GameOfChromesApp {
       } catch (e) {}
       this.handleSuccessStrike(activeQuest);
     } else if (
-      (isModifierPressed || ['F5', 'F11', 'F12'].includes(key)) &&
+      (isModifierPressed || isTrainerFunctionKey) &&
       key !== 'Control' && key !== 'Meta' && key !== 'Shift' && key !== 'Alt'
     ) {
       this.handleFailedStrike(activeQuest);
@@ -770,9 +791,9 @@ class GameOfChromesApp {
       if (text === '+' && (event.key === '+' || event.key === '=')) match = true;
       if (text === '−' && (event.key === '-' || event.key === '_')) match = true;
       if ((text === 'delete' || text === 'backspace') && (event.key === 'Delete' || event.key === 'Backspace')) match = true;
-      if (text === 'f5' && event.key === 'F5') match = true;
-      if (text === 'f11' && event.key === 'F11') match = true;
-      if (text === 'f12' && event.key === 'F12') match = true;
+      if (text === 'f5' && (event.key === 'F5' || event.code === 'F5')) match = true;
+      if (text === 'f11' && (event.key === 'F11' || event.code === 'F11')) match = true;
+      if (text === 'f12' && (event.key === 'F12' || event.code === 'F12')) match = true;
 
       if (match) {
         cap.classList.toggle('active-press', isDown);

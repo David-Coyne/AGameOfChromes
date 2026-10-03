@@ -1652,7 +1652,14 @@ export class BrowserSimulator {
   openDevToolsPanel(tab = 'elements') {
     this.devtoolsOpen = true;
     this.devtoolsTab = tab;
+    // Clear overlays that would cover the dock (downloads page was z-index above dock)
     this.sourceOverlayOpen = false;
+    this.downloadsPageOpen = false;
+    this.printOverlayOpen = false;
+    this.clearDataDialogOpen = false;
+    this.findOverlayOpen = false;
+    this.findHighlightActive = false;
+    this.inspectMode = false;
     this.render();
   }
 
@@ -1660,32 +1667,63 @@ export class BrowserSimulator {
     this.inspectMode = false;
     this.openDevToolsPanel('elements');
     this.triggerWarpSweep();
-    this.showHeroBadge('DEVTOOLS DOCKED!', 'Elements panel forged', '🔧');
+    const dock = this.container.querySelector('#simDevToolsDock');
+    if (dock) {
+      dock.classList.remove('devtools-flash-open');
+      void dock.offsetWidth;
+      dock.classList.add('devtools-flash-open');
+    }
+    this.showHeroBadge('DEVTOOLS OPENED!', 'F12 → Elements dock at the bottom', '🔧');
     return 'DevTools opened!';
   }
 
   openConsoleAnim() {
     this.inspectMode = false;
     this.openDevToolsPanel('console');
-    this.showHeroBadge('CONSOLE SUMMONED!', 'Ready for JS commands', '💻');
+    this.triggerWarpSweep();
+    const dock = this.container.querySelector('#simDevToolsDock');
+    if (dock) {
+      dock.classList.remove('devtools-flash-open');
+      void dock.offsetWidth;
+      dock.classList.add('devtools-flash-open');
+    }
+    // Ensure Console tab reads as active after render
+    const consoleTab = this.container.querySelector('[data-dt-tab="console"]');
+    if (consoleTab) consoleTab.classList.add('active');
+    this.showHeroBadge('CONSOLE OPENED!', 'Ctrl+Shift+J → Console dock ready', '💻');
     return 'JavaScript console opened!';
   }
 
   inspectElementAnim() {
     // Chrome-like inspect: crosshair → highlight sweep → Elements dock
+    clearTimeout(this._inspectOpenTimer);
+    clearInterval(this._inspectSweep);
+
+    this.downloadsPageOpen = false;
+    this.sourceOverlayOpen = false;
+    this.printOverlayOpen = false;
+    this.clearDataDialogOpen = false;
+    this.findOverlayOpen = false;
+    this.findHighlightActive = false;
+    this.devtoolsOpen = false;
+
     this.inspectMode = true;
     this.inspectTargetLabel = 'div.meme-picture-frame';
-    this.devtoolsOpen = false;
     this.render();
-    this.showHeroBadge('INSPECT MODE!', 'Crosshair locked on the DOM', '🔍');
+    this.showHeroBadge('INSPECT MODE!', 'Ctrl+Shift+C — crosshair locked on the DOM', '🔍');
 
     // After highlight choreography, open Elements with selection
-    clearTimeout(this._inspectOpenTimer);
     this._inspectOpenTimer = setTimeout(() => {
       this.inspectMode = false;
       this.openDevToolsPanel('elements');
+      const dock = this.container.querySelector('#simDevToolsDock');
+      if (dock) {
+        dock.classList.remove('devtools-flash-open');
+        void dock.offsetWidth;
+        dock.classList.add('devtools-flash-open');
+      }
       this.showHeroBadge('ELEMENT SELECTED!', this.inspectTargetLabel, '🎯');
-    }, 1400);
+    }, 1600);
 
     return 'Element inspector activated!';
   }

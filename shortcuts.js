@@ -456,7 +456,7 @@ export const SHORTCUTS = [
       windows: { display: ['F12'], meta: false, ctrl: false, shift: false, alt: false, key: 'f12' }
     },
     simAction: 'open_devtools',
-    hint: 'Press F12 after Fullscreen Mode (or Ctrl+Shift+I anytime).'
+    hint: 'Press F12 in Fullscreen Mode (Chrome steals F12 otherwise). Alt: Ctrl+Shift+I anytime.'
   },
   {
     id: 'open_console',
@@ -471,7 +471,7 @@ export const SHORTCUTS = [
       windows: { display: ['Ctrl', 'Shift', 'J'], meta: false, ctrl: true, shift: true, alt: false, key: 'j' }
     },
     simAction: 'open_console',
-    hint: 'Open the console using Ctrl+Shift+J or Cmd+Option+J.'
+    hint: 'Press Ctrl+Shift+J in Fullscreen Mode (Chrome steals it otherwise). Mac: Cmd+Option+J.'
   },
   {
     id: 'inspect_element',
@@ -486,7 +486,7 @@ export const SHORTCUTS = [
       windows: { display: ['Ctrl', 'Shift', 'C'], meta: false, ctrl: true, shift: true, alt: false, key: 'c' }
     },
     simAction: 'inspect_element',
-    hint: 'Inspect an element using Ctrl+Shift+C or Cmd+Option+C.'
+    hint: 'Press Ctrl+Shift+C in Fullscreen Mode (Chrome steals Inspect otherwise). Mac: Cmd+Option+C.'
   },
   {
     id: 'toggle_device_toolbar',
@@ -538,7 +538,8 @@ export function matchesShortcut(event, quest, currentOS) {
     const targetKeys = Array.isArray(keys) ? keys : [keys];
     return targetKeys.some(k => {
       const target = k.toLowerCase();
-      if (target === pressedKey || `key${target}` === pressedCode) return true;
+      // Match key value OR code value (F12 → key "F12", code "F12"; letters → code "KeyW")
+      if (target === pressedKey || target === pressedCode || `key${target}` === pressedCode) return true;
       // Digit keys report code "Digit0" etc.
       if (`digit${target}` === pressedCode) return true;
       // Clear Browsing Data: Mac "Delete" key often emits Backspace
@@ -549,6 +550,10 @@ export function matchesShortcut(event, quest, currentOS) {
       if (target.startsWith('arrow') && (pressedKey === target || pressedCode === target)) {
         return true;
       }
+      // Function keys: F5/F11/F12 (Keyboard Lock may deliver code-only / Unidentified key)
+      if (/^f\d{1,2}$/.test(target) && (pressedKey === target || pressedCode === target)) {
+        return true;
+      }
       return false;
     });
   };
@@ -557,13 +562,18 @@ export function matchesShortcut(event, quest, currentOS) {
   const primaryModPressed = event.ctrlKey || event.metaKey;
   const shiftPressed = event.shiftKey;
   const altPressed = event.altKey;
+  const isBareFunctionKey = (code) =>
+    (pressedKey === code || pressedCode === code) && !primaryModPressed && !altPressed;
 
   // Next/Prev tab special overrides
   if (quest.id === 'next_tab' && (pressedKey === 'tab' || pressedCode === 'tab') && primaryModPressed && !shiftPressed && !altPressed) return true;
   if (quest.id === 'prev_tab' && (pressedKey === 'tab' || pressedCode === 'tab') && primaryModPressed && shiftPressed && !altPressed) return true;
 
-    // Alternatives
-  if (quest.id === 'reload_page' && (pressedKey === 'f5' || pressedCode === 'f5') && !primaryModPressed && !shiftPressed && !altPressed) return true;
+  // Alternatives / reserved function keys (match before modifier matrix)
+  if (quest.id === 'reload_page' && isBareFunctionKey('f5') && !shiftPressed) return true;
+  if (quest.id === 'fullscreen_toggle' && isBareFunctionKey('f11')) return true;
+  // F12 opens DevTools — accept even if Shift is down (some OEM keyboards), reject Ctrl/Meta/Alt
+  if (quest.id === 'open_devtools' && (pressedKey === 'f12' || pressedCode === 'f12') && !primaryModPressed && !altPressed) return true;
   if (quest.id === 'open_devtools' && checkKey('i') && primaryModPressed && shiftPressed && !altPressed) return true;
   // Mac DevTools: Cmd + Option + I
   if (isMac && quest.id === 'open_devtools' && checkKey('i') && primaryModPressed && altPressed && !shiftPressed) return true;
@@ -578,6 +588,16 @@ export function matchesShortcut(event, quest, currentOS) {
         return true; // Ctrl+J (not Ctrl+Shift+J — that's Console)
       }
     }
+  }
+  // Console: Ctrl+Shift+J (Win) / Cmd+Option+J (Mac) — must not match Downloads
+  if (quest.id === 'open_console') {
+    if (checkKey('j') && primaryModPressed && !altPressed && shiftPressed && !isMac) return true;
+    if (isMac && checkKey('j') && primaryModPressed && altPressed && !shiftPressed) return true;
+  }
+  // Inspect Element: Ctrl+Shift+C (Win) / Cmd+Option+C (Mac)
+  if (quest.id === 'inspect_element') {
+    if (checkKey('c') && primaryModPressed && !altPressed && shiftPressed && !isMac) return true;
+    if (isMac && checkKey('c') && primaryModPressed && altPressed && !shiftPressed) return true;
   }
 
   // Determine required modifiers
