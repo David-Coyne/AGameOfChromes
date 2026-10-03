@@ -117,6 +117,7 @@ class GameOfChromesApp {
       && typeof navigator.keyboard.lock === 'function';
     this.isTransitioning = false; // Guard against rapid-mash exploit
     this._armorToggleInFlight = false; // Prevent Enter keydown+button click double-toggle
+    this._welcomeConfirmed = false; // Single-flight guard for welcome start
 
     // Performance Stats
     this.sessionCorrect = 0;
@@ -225,6 +226,57 @@ class GameOfChromesApp {
     // Campaign is the default mode — reflect that in the mode buttons
     this.dom.modeBtnCampaign?.classList.add('btn-primary');
     this.dom.modeBtnCombat?.classList.remove('btn-primary');
+
+    // After reload, Chrome often leaves focus in the omnibox — page never sees Enter.
+    // Pull focus onto the start button so Enter reaches our confirm path.
+    this.armWelcomeFocus();
+    requestAnimationFrame(() => this.armWelcomeFocus());
+    window.addEventListener('load', () => this.armWelcomeFocus(), { once: true });
+
+    // Classic-script fallback may have confirmed before the module finished booting
+    if (window.__gocStart?.confirmed && window.__gocStart.pendingFullscreen != null) {
+      const wantFs = !!window.__gocStart.pendingFullscreen;
+      window.__gocStart.pendingFullscreen = null;
+      this._welcomeConfirmed = true;
+      if (wantFs) this.enterFullscreenArmorFromGesture();
+    }
+  }
+
+  /** Move keyboard focus into the page so Enter is not swallowed by the browser chrome. */
+  armWelcomeFocus() {
+    if (this._welcomeConfirmed) return;
+    if (!this.dom.welcomeModal?.classList.contains('show')) return;
+    const btn = this.dom.welcomeFullscreenBtn;
+    if (!btn) return;
+    try { window.focus(); } catch (_) { /* ignore */ }
+    try {
+      btn.focus({ preventScroll: true });
+    } catch (_) {
+      try { btn.focus(); } catch (__) { /* ignore */ }
+    }
+  }
+
+  /**
+   * Single confirm path for welcome modal — used by Enter keydown and both start buttons.
+   * Guarantees a visible result: modal dismisses and game is playable.
+   */
+  confirmStartModal({ fullscreen = true } = {}) {
+    if (this._welcomeConfirmed) return;
+    if (!this.dom.welcomeModal?.classList.contains('show')) return;
+
+    this._welcomeConfirmed = true;
+    if (window.__gocStart) {
+      window.__gocStart.confirmed = true;
+      window.__gocStart.pendingFullscreen = null;
+    }
+
+    this.dom.welcomeModal.classList.remove('show');
+    this.blurActiveControl();
+
+    if (fullscreen) {
+      this.enterFullscreenArmorFromGesture();
+    }
+    try { window.soundEngine?.playClick?.(); } catch (_) { /* ignore */ }
   }
 
   // --- Browser Armor & Tab Close Prevention ---
@@ -453,19 +505,16 @@ class GameOfChromesApp {
       window.soundEngine.playClick();
     });
 
-    // Welcome Modal Buttons
-    this.dom.welcomeFullscreenBtn?.addEventListener('click', () => {
-      this.dom.welcomeModal?.classList.remove('show');
-      this.blurActiveControl();
-      this.enterFullscreenArmorFromGesture();
-      window.soundEngine.playClick();
+    // Welcome Modal Buttons — same confirm path as Enter / Escape
+    this.dom.welcomeFullscreenBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.confirmStartModal({ fullscreen: true });
     });
 
     // BUG FIX: welcomeWindowedBtn was missing from this.dom
-    this.dom.welcomeWindowedBtn?.addEventListener('click', () => {
-      this.dom.welcomeModal?.classList.remove('show');
-      this.blurActiveControl();
-      window.soundEngine.playClick();
+    this.dom.welcomeWindowedBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.confirmStartModal({ fullscreen: false });
     });
 
     // Dedicated Popup App Window Launcher
@@ -656,28 +705,26 @@ class GameOfChromesApp {
   // --- Keyboard Event Interceptor ---
   handleKeyDown(event) {
     const key = event.key || '';
+    const code = event.code || '';
 
     // Check if Welcome Modal is active
     if (this.dom.welcomeModal && this.dom.welcomeModal.classList.contains('show')) {
-      if (isConfirmKey(event)) {
-        // preventDefault stops focused "Enter Fullscreen" button from also clicking
-        // (that double-fired toggleFullscreenArmor → enter then immediately exit)
+      // Enter / NumpadEnter → same path as "Enter Fullscreen Mode" button (not Space —
+      // Space should activate the focused button via click, which also calls confirmStartModal).
+      const isEnter =
+        key === 'Enter' || code === 'Enter' || code === 'NumpadEnter';
+      if (isEnter) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
-        this.dom.welcomeModal.classList.remove('show');
-        this.blurActiveControl();
-        this.enterFullscreenArmorFromGesture();
-        window.soundEngine.playClick();
+        this.confirmStartModal({ fullscreen: true });
         return;
       }
       if (isCancelKey(event)) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
-        this.dom.welcomeModal.classList.remove('show');
-        this.blurActiveControl();
-        window.soundEngine.playClick();
+        this.confirmStartModal({ fullscreen: false });
         return;
       }
       return;
@@ -1358,7 +1405,18 @@ class GameOfChromesApp {
   }
 }
 
-// Boot application when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-  window.app = new GameOfChromesApp();
-});
+// Boot application when DOM is ready (modules can race DOMContentLoaded on some restores)
+function bootGameOfChromes() {
+  if (window.app) return;
+  try {
+    window.app = new GameOfChromesApp();
+  } catch (err) {
+    console.error('A Game of Chromes failed to boot:', err);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootGameOfChromes);
+} else {
+  bootGameOfChromes();
+}
