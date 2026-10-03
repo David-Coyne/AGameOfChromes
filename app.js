@@ -45,10 +45,63 @@ function getMasteryLevel(successes) {
   return 0;
 }
 
+function safeParseJSON(raw, fallback) {
+  try {
+    if (raw == null || raw === '') return fallback;
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+function safeInt(raw, fallback = 0) {
+  const n = parseInt(raw ?? String(fallback), 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function localDateString(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// Keys Chrome/OS normally steals — must be listed for Keyboard Lock (code values)
+const KEYBOARD_LOCK_CODES = [
+  // Letter/digit accelerators (Ctrl+W family, etc.)
+  'KeyW', 'KeyT', 'KeyN', 'KeyH', 'KeyL', 'KeyD', 'KeyR', 'KeyS', 'KeyP',
+  'KeyJ', 'KeyU', 'KeyB', 'KeyF', 'KeyE', 'KeyM', 'KeyC', 'KeyY', 'KeyI',
+  'Digit0', 'Digit1',
+  'Tab', 'BracketLeft', 'BracketRight', 'equal', 'Minus', 'Delete', 'Backspace',
+  // Function keys Chrome owns in windowed mode (F11 fullscreen, F12 DevTools, F5 reload)
+  'F5', 'F11', 'F12'
+];
+
+// Quests whose primary key Chrome intercepts without Keyboard Lock
+const KEYBOARD_LOCK_QUEST_IDS = new Set([
+  'fullscreen_toggle',
+  'open_devtools',
+  'open_downloads',
+  'open_console',
+  'inspect_element'
+]);
+
+function isConfirmKey(event) {
+  const key = event.key || '';
+  const code = event.code || '';
+  return key === 'Enter' || key === ' ' || code === 'Enter' || code === 'NumpadEnter' || code === 'Space';
+}
+
+function isCancelKey(event) {
+  const key = event.key || '';
+  const code = event.code || '';
+  return key === 'Escape' || code === 'Escape';
+}
+
 class GameOfChromesApp {
   constructor() {
     this.currentOS = detectOS();
-    this.xp = parseInt(localStorage.getItem('goc_xp') || '0', 10);
+    this.xp = safeInt(localStorage.getItem('goc_xp'), 0);
     this.currentRank = getRankForXP(this.xp);
     this.currentQuestIndex = 0;
     this.combo = 0;
@@ -58,21 +111,31 @@ class GameOfChromesApp {
     this.combatTimeLeft = 60;
     this.combatScore = 0;
     this.isFullscreenArmor = false;
+    this.keyboardLockActive = false;
+    this.keyboardLockSupported = typeof navigator !== 'undefined'
+      && !!navigator.keyboard
+      && typeof navigator.keyboard.lock === 'function';
     this.isTransitioning = false; // Guard against rapid-mash exploit
+    this._armorToggleInFlight = false; // Prevent Enter keydown+button click double-toggle
+    this._welcomeConfirmed = false; // Single-flight guard for welcome start
 
     // Performance Stats
     this.sessionCorrect = 0;
     this.sessionIncorrect = 0;
+    this.lifetimeCorrect = safeInt(localStorage.getItem('goc_total_correct'), 0);
+    this.lifetimeIncorrect = safeInt(localStorage.getItem('goc_total_incorrect'), 0);
     this.sessionCampaignCorrect = 0; // For perfect run tracking
     this.sessionCampaignTotal = 0;
     this.questStartTime = Date.now();
     this.reactionTimes = [];
     this.speedDemonTimestamps = []; // Track last 5 timestamps for speed demon
-    this.bestStreak = parseInt(localStorage.getItem('goc_best_streak') || '0', 10);
-    this.combatHighScores = JSON.parse(localStorage.getItem('goc_combat_scores') || '[]');
+    this.bestStreak = safeInt(localStorage.getItem('goc_best_streak'), 0);
+    this.combatHighScores = safeParseJSON(localStorage.getItem('goc_combat_scores'), []);
+    if (!Array.isArray(this.combatHighScores)) this.combatHighScores = [];
 
     // Per-shortcut mastery data
-    this.masteryData = JSON.parse(localStorage.getItem('goc_mastery') || '{}');
+    this.masteryData = safeParseJSON(localStorage.getItem('goc_mastery'), {});
+    if (!this.masteryData || typeof this.masteryData !== 'object') this.masteryData = {};
     // Initialize missing shortcuts
     SHORTCUTS.forEach(s => {
       if (!this.masteryData[s.id]) {
@@ -81,7 +144,8 @@ class GameOfChromesApp {
     });
 
     // Unlocked achievements
-    this.unlockedAchievements = new Set(JSON.parse(localStorage.getItem('goc_achievements') || '[]'));
+    const savedAchievements = safeParseJSON(localStorage.getItem('goc_achievements'), []);
+    this.unlockedAchievements = new Set(Array.isArray(savedAchievements) ? savedAchievements : []);
 
     // DOM Elements
     this.dom = {
@@ -159,6 +223,60 @@ class GameOfChromesApp {
     this.renderGrimoire();
     this.updateStatsUI();
     this.updateComboUI();
+    // Campaign is the default mode — reflect that in the mode buttons
+    this.dom.modeBtnCampaign?.classList.add('btn-primary');
+    this.dom.modeBtnCombat?.classList.remove('btn-primary');
+
+    // After reload, Chrome often leaves focus in the omnibox — page never sees Enter.
+    // Pull focus onto the start button so Enter reaches our confirm path.
+    this.armWelcomeFocus();
+    requestAnimationFrame(() => this.armWelcomeFocus());
+    window.addEventListener('load', () => this.armWelcomeFocus(), { once: true });
+
+    // Classic-script fallback may have confirmed before the module finished booting
+    if (window.__gocStart?.confirmed && window.__gocStart.pendingFullscreen != null) {
+      const wantFs = !!window.__gocStart.pendingFullscreen;
+      window.__gocStart.pendingFullscreen = null;
+      this._welcomeConfirmed = true;
+      if (wantFs) this.enterFullscreenArmorFromGesture();
+    }
+  }
+
+  /** Move keyboard focus into the page so Enter is not swallowed by the browser chrome. */
+  armWelcomeFocus() {
+    if (this._welcomeConfirmed) return;
+    if (!this.dom.welcomeModal?.classList.contains('show')) return;
+    const btn = this.dom.welcomeFullscreenBtn;
+    if (!btn) return;
+    try { window.focus(); } catch (_) { /* ignore */ }
+    try {
+      btn.focus({ preventScroll: true });
+    } catch (_) {
+      try { btn.focus(); } catch (__) { /* ignore */ }
+    }
+  }
+
+  /**
+   * Single confirm path for welcome modal — used by Enter keydown and both start buttons.
+   * Guarantees a visible result: modal dismisses and game is playable.
+   */
+  confirmStartModal({ fullscreen = true } = {}) {
+    if (this._welcomeConfirmed) return;
+    if (!this.dom.welcomeModal?.classList.contains('show')) return;
+
+    this._welcomeConfirmed = true;
+    if (window.__gocStart) {
+      window.__gocStart.confirmed = true;
+      window.__gocStart.pendingFullscreen = null;
+    }
+
+    this.dom.welcomeModal.classList.remove('show');
+    this.blurActiveControl();
+
+    if (fullscreen) {
+      this.enterFullscreenArmorFromGesture();
+    }
+    try { window.soundEngine?.playClick?.(); } catch (_) { /* ignore */ }
   }
 
   // --- Browser Armor & Tab Close Prevention ---
@@ -170,43 +288,173 @@ class GameOfChromesApp {
     });
   }
 
-  async toggleFullscreenArmor() {
+  supportsKeyboardLock() {
+    return this.keyboardLockSupported;
+  }
+
+  async engageKeyboardLock() {
+    if (!this.supportsKeyboardLock()) {
+      this.keyboardLockActive = false;
+      return { ok: false, reason: 'unsupported' };
+    }
+    if (!document.fullscreenElement) {
+      this.keyboardLockActive = false;
+      return { ok: false, reason: 'not-fullscreen' };
+    }
     try {
-      if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen();
-        this.isFullscreenArmor = true;
-        if (navigator.keyboard && navigator.keyboard.lock) {
-          await navigator.keyboard.lock(['KeyW', 'KeyT', 'KeyN', 'KeyH', 'KeyL', 'KeyD', 'Tab', 'KeyR', 'KeyS', 'KeyP', 'KeyJ', 'KeyU', 'KeyB', 'KeyF', 'KeyE', 'KeyM', 'KeyC']);
-          console.log("Keyboard Lock engaged for browser shortcuts.");
-        }
-        if (this.dom.armorToggleBtn) {
-          this.dom.armorToggleBtn.innerHTML = '🛡️ Fullscreen Active';
-          this.dom.armorToggleBtn.classList.add('armor-active');
-        }
-        this.dom.questFeedback.textContent = '🛡️ Fullscreen Mode Active! Browser shortcuts are locked to the game.';
-        this.dom.questFeedback.className = 'quest-feedback success';
-      } else {
-        await document.exitFullscreen();
-        if (navigator.keyboard && navigator.keyboard.unlock) {
-          navigator.keyboard.unlock();
-        }
-        this.isFullscreenArmor = false;
-        if (this.dom.armorToggleBtn) {
-          this.dom.armorToggleBtn.innerHTML = '🛡️ Fullscreen Mode';
-          this.dom.armorToggleBtn.classList.remove('armor-active');
-        }
+      await navigator.keyboard.lock(KEYBOARD_LOCK_CODES);
+      this.keyboardLockActive = true;
+      return { ok: true };
+    } catch (err) {
+      console.warn('Keyboard Lock failed:', err);
+      this.keyboardLockActive = false;
+      return { ok: false, reason: 'denied', error: err };
+    }
+  }
+
+  releaseKeyboardLock() {
+    try {
+      if (navigator.keyboard && typeof navigator.keyboard.unlock === 'function') {
+        navigator.keyboard.unlock();
       }
     } catch (err) {
-      console.warn("Fullscreen/KeyboardLock error:", err);
-      this.dom.questFeedback.textContent = '🛡️ Tip: Use Fullscreen mode to practice all shortcuts including Ctrl+W safely!';
+      console.warn('Keyboard unlock failed:', err);
+    }
+    this.keyboardLockActive = false;
+  }
+
+  updateArmorButtonUI(active) {
+    if (!this.dom.armorToggleBtn) return;
+    if (active) {
+      this.dom.armorToggleBtn.innerHTML = this.keyboardLockActive
+        ? '🛡️ Armor Locked'
+        : '🛡️ Fullscreen Active';
+      this.dom.armorToggleBtn.classList.add('armor-active');
+      this.dom.armorToggleBtn.title = this.keyboardLockActive
+        ? 'Keyboard Lock active — F11, F12, Ctrl+W and other reserved keys go to the game. Click to exit.'
+        : 'Fullscreen active, but Keyboard Lock is unavailable — F11/F12 may still be stolen by Chrome. Click to exit.';
+    } else {
+      this.dom.armorToggleBtn.innerHTML = '🛡️ Fullscreen Mode';
+      this.dom.armorToggleBtn.classList.remove('armor-active');
+      this.dom.armorToggleBtn.title = 'Enter Fullscreen Armor to capture F11, F12, Ctrl+W and other reserved Chrome keys';
+    }
+  }
+
+  getReservedKeyHint(quest) {
+    if (!quest || !KEYBOARD_LOCK_QUEST_IDS.has(quest.id)) return null;
+    if (this.keyboardLockActive) {
+      if (quest.id === 'fullscreen_toggle') {
+        return 'Keyboard Lock armed — press F11 now (sim fullscreen only; game armor stays on).';
+      }
+      if (quest.id === 'open_downloads') {
+        return 'Keyboard Lock armed — press Ctrl+J (or Cmd+Shift+J) to open Downloads.';
+      }
+      if (quest.id === 'open_console') {
+        return 'Keyboard Lock armed — press Ctrl+Shift+J (Mac: Cmd+Option+J) for Console.';
+      }
+      if (quest.id === 'inspect_element') {
+        return 'Keyboard Lock armed — press Ctrl+Shift+C (Mac: Cmd+Option+C) to Inspect.';
+      }
+      return 'Keyboard Lock armed — press F12 now (or Ctrl+Shift+I).';
+    }
+    if (quest.id === 'fullscreen_toggle') {
+      return 'Enter Fullscreen Mode to capture F11 (Chrome steals F11 for browser fullscreen otherwise).';
+    }
+    if (quest.id === 'open_downloads') {
+      return 'Enter Fullscreen Mode to capture Ctrl+J (Chrome steals it for chrome://downloads otherwise). Or click Strike Blade / keycaps.';
+    }
+    if (quest.id === 'open_console') {
+      return 'Enter Fullscreen Mode to capture Ctrl+Shift+J (Chrome steals it for Console otherwise). Or click Strike Blade.';
+    }
+    if (quest.id === 'inspect_element') {
+      return 'Enter Fullscreen Mode to capture Ctrl+Shift+C (Chrome steals it for Inspect otherwise). Or click Strike Blade.';
+    }
+    return 'Enter Fullscreen Mode to capture F12 (Chrome steals F12 for DevTools otherwise). Or use Ctrl+Shift+I.';
+  }
+
+  applyQuestFeedbackHint(quest) {
+    const reservedHint = this.getReservedKeyHint(quest);
+    if (reservedHint && !this.keyboardLockActive) {
+      this.dom.questFeedback.textContent = `🛡️ ${reservedHint}`;
+      this.dom.questFeedback.className = 'quest-feedback';
+    } else {
+      this.dom.questFeedback.textContent = quest.hint;
+      this.dom.questFeedback.className = 'quest-feedback';
+    }
+  }
+
+  blurActiveControl() {
+    const el = document.activeElement;
+    if (el && el !== document.body && typeof el.blur === 'function') {
+      el.blur();
+    }
+  }
+
+  async enterFullscreenArmorFromGesture() {
+    // Used by welcome Enter / Fullscreen button — never toggle OFF if already fullscreen
+    if (document.fullscreenElement) {
+      if (!this.keyboardLockActive) {
+        await this.engageKeyboardLock();
+        this.updateArmorButtonUI(true);
+      }
+      return;
+    }
+    await this.toggleFullscreenArmor();
+  }
+
+  async toggleFullscreenArmor() {
+    if (this._armorToggleInFlight) return;
+    this._armorToggleInFlight = true;
+    try {
+      if (!document.fullscreenElement) {
+        // Must be JS-initiated fullscreen — user F11 fullscreen cannot use Keyboard Lock
+        await document.documentElement.requestFullscreen();
+        this.isFullscreenArmor = true;
+        const lockResult = await this.engageKeyboardLock();
+        this.updateArmorButtonUI(true);
+
+        if (lockResult.ok) {
+          this.dom.questFeedback.textContent = '🛡️ Fullscreen Armor locked! F11, F12, Ctrl+W and other reserved keys are captured by the game.';
+          this.dom.questFeedback.className = 'quest-feedback success';
+        } else if (lockResult.reason === 'unsupported') {
+          this.dom.questFeedback.textContent = '🛡️ Fullscreen on, but this browser has no Keyboard Lock — F11/F12 may still open Chrome UI. Use Chrome on https/localhost.';
+          this.dom.questFeedback.className = 'quest-feedback error';
+        } else {
+          this.dom.questFeedback.textContent = '🛡️ Fullscreen on, but Keyboard Lock was denied — allow keyboard lock / retry the Fullscreen button to capture F11/F12.';
+          this.dom.questFeedback.className = 'quest-feedback error';
+        }
+        // Refresh hint if current quest needs lock
+        const quest = this.getCurrentQuest();
+        if (KEYBOARD_LOCK_QUEST_IDS.has(quest?.id) && lockResult.ok) {
+          this.applyQuestFeedbackHint(quest);
+        }
+      } else {
+        this.releaseKeyboardLock();
+        await document.exitFullscreen();
+        this.isFullscreenArmor = false;
+        this.updateArmorButtonUI(false);
+        const quest = this.getCurrentQuest();
+        if (quest) this.applyQuestFeedbackHint(quest);
+      }
+    } catch (err) {
+      console.warn('Fullscreen/KeyboardLock error:', err);
+      this.releaseKeyboardLock();
+      this.isFullscreenArmor = !!document.fullscreenElement;
+      this.updateArmorButtonUI(this.isFullscreenArmor);
+      this.dom.questFeedback.textContent = '🛡️ Tip: Click Fullscreen Mode (user gesture + secure context) to capture F11, F12, and Ctrl+W.';
+      this.dom.questFeedback.className = 'quest-feedback error';
+    } finally {
+      this._armorToggleInFlight = false;
     }
   }
 
   // --- Streak Tracker ---
   initStreak() {
-    const today = new Date().toISOString().slice(0, 10);
+    // Use local calendar dates — UTC (toISOString) breaks streaks near midnight
+    const today = localDateString();
     const lastDate = localStorage.getItem('goc_last_date');
-    let streak = parseInt(localStorage.getItem('goc_streak') || '1', 10);
+    let streak = safeInt(localStorage.getItem('goc_streak'), 1);
+    if (streak < 1) streak = 1;
 
     if (!lastDate) {
       localStorage.setItem('goc_last_date', today);
@@ -218,7 +466,9 @@ class GameOfChromesApp {
       return streak;
     }
 
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = localDateString(yesterdayDate);
     if (lastDate === yesterday) {
       streak += 1;
       localStorage.setItem('goc_streak', streak.toString());
@@ -255,17 +505,16 @@ class GameOfChromesApp {
       window.soundEngine.playClick();
     });
 
-    // Welcome Modal Buttons
-    this.dom.welcomeFullscreenBtn?.addEventListener('click', () => {
-      this.dom.welcomeModal?.classList.remove('show');
-      this.toggleFullscreenArmor();
-      window.soundEngine.playClick();
+    // Welcome Modal Buttons — same confirm path as Enter / Escape
+    this.dom.welcomeFullscreenBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.confirmStartModal({ fullscreen: true });
     });
 
     // BUG FIX: welcomeWindowedBtn was missing from this.dom
-    this.dom.welcomeWindowedBtn?.addEventListener('click', () => {
-      this.dom.welcomeModal?.classList.remove('show');
-      window.soundEngine.playClick();
+    this.dom.welcomeWindowedBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.confirmStartModal({ fullscreen: false });
     });
 
     // Dedicated Popup App Window Launcher
@@ -274,19 +523,21 @@ class GameOfChromesApp {
       window.soundEngine.playClick();
     });
 
-    document.addEventListener('fullscreenchange', () => {
+    document.addEventListener('fullscreenchange', async () => {
       if (!document.fullscreenElement) {
+        // Esc / browser exit — always release lock so keys return to Chrome
+        this.releaseKeyboardLock();
         this.isFullscreenArmor = false;
-        if (this.dom.armorToggleBtn) {
-          this.dom.armorToggleBtn.innerHTML = '🛡️ Fullscreen Mode';
-          this.dom.armorToggleBtn.classList.remove('armor-active');
-        }
+        this.updateArmorButtonUI(false);
+        const quest = this.getCurrentQuest();
+        if (quest) this.applyQuestFeedbackHint(quest);
       } else {
         this.isFullscreenArmor = true;
-        if (this.dom.armorToggleBtn) {
-          this.dom.armorToggleBtn.innerHTML = '🛡️ Fullscreen Active';
-          this.dom.armorToggleBtn.classList.add('armor-active');
+        // Re-engage lock if we entered fullscreen (covers race after requestFullscreen)
+        if (!this.keyboardLockActive) {
+          await this.engageKeyboardLock();
         }
+        this.updateArmorButtonUI(true);
       }
     });
 
@@ -315,6 +566,7 @@ class GameOfChromesApp {
     // Modal Close Button
     this.dom.modalCloseBtn?.addEventListener('click', () => {
       this.dom.modalBackdrop.classList.remove('show');
+      this.blurActiveControl();
       window.soundEngine.playClick();
     });
 
@@ -374,8 +626,7 @@ class GameOfChromesApp {
     if (this.dom.targetKeysLabel) {
       this.dom.targetKeysLabel.textContent = `Action: ${quest.actionName}`;
     }
-    this.dom.questFeedback.textContent = quest.hint;
-    this.dom.questFeedback.className = 'quest-feedback';
+    this.applyQuestFeedbackHint(quest);
 
     // Render interactive keycaps
     const req = quest.keys[this.currentOS] || quest.keys.windows;
@@ -454,33 +705,39 @@ class GameOfChromesApp {
   // --- Keyboard Event Interceptor ---
   handleKeyDown(event) {
     const key = event.key || '';
+    const code = event.code || '';
 
     // Check if Welcome Modal is active
     if (this.dom.welcomeModal && this.dom.welcomeModal.classList.contains('show')) {
-      if (key === 'Enter' || key === ' ') {
+      // Enter / NumpadEnter → same path as "Enter Fullscreen Mode" button (not Space —
+      // Space should activate the focused button via click, which also calls confirmStartModal).
+      const isEnter =
+        key === 'Enter' || code === 'Enter' || code === 'NumpadEnter';
+      if (isEnter) {
         event.preventDefault();
         event.stopPropagation();
-        this.dom.welcomeModal.classList.remove('show');
-        this.toggleFullscreenArmor();
-        window.soundEngine.playClick();
+        event.stopImmediatePropagation();
+        this.confirmStartModal({ fullscreen: true });
         return;
       }
-      if (key === 'Escape') {
+      if (isCancelKey(event)) {
         event.preventDefault();
         event.stopPropagation();
-        this.dom.welcomeModal.classList.remove('show');
-        window.soundEngine.playClick();
+        event.stopImmediatePropagation();
+        this.confirmStartModal({ fullscreen: false });
         return;
       }
       return;
     }
 
-    // Check if Prize / Rank Promotion Modal is active
+    // Check if Prize / Rank Promotion Modal is active (Claim Honor)
     if (this.dom.modalBackdrop && this.dom.modalBackdrop.classList.contains('show')) {
-      if (key === 'Enter' || key === ' ' || key === 'Escape') {
+      if (isConfirmKey(event) || isCancelKey(event)) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         this.dom.modalBackdrop.classList.remove('show');
+        this.blurActiveControl();
         window.soundEngine.playClick();
         return;
       }
@@ -489,10 +746,12 @@ class GameOfChromesApp {
 
     // Check if Stats Modal is active
     if (this.dom.statsModal && this.dom.statsModal.classList.contains('show')) {
-      if (key === 'Escape') {
+      if (isCancelKey(event) || isConfirmKey(event)) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         this.dom.statsModal.classList.remove('show');
+        this.blurActiveControl();
         window.soundEngine.playClick();
         return;
       }
@@ -501,20 +760,59 @@ class GameOfChromesApp {
 
     // Check if Grimoire Modal is active
     if (this.dom.grimoireModal && this.dom.grimoireModal.classList.contains('show')) {
-      if (key === 'Escape') {
+      if (isCancelKey(event)) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         this.dom.grimoireModal.classList.remove('show');
+        this.blurActiveControl();
         window.soundEngine.playClick();
-        return;
       }
+      // Block quest input while browsing the Grimoire (match other modals)
+      return;
+    }
+
+    // Don't steal keystrokes or count misses while typing in simulator inputs
+    const activeEl = document.activeElement;
+    const tag = activeEl?.tagName;
+    if (
+      activeEl &&
+      (tag === 'INPUT' || tag === 'TEXTAREA' || activeEl.isContentEditable)
+    ) {
+      // Still block dangerous browser accelerators inside inputs
+      const isModifierPressed = event.ctrlKey || event.metaKey || event.altKey;
+      const keyLower = key.toLowerCase();
+      if (isModifierPressed && ['w', 't', 'n'].includes(keyLower)) {
+        try {
+          event.preventDefault();
+          event.stopPropagation();
+        } catch (err) {}
+      }
+      return;
+    }
+
+    // Ignore further scoring while the quest is animating to the next one
+    if (this.isTransitioning) {
+      if (
+        event.ctrlKey || event.metaKey || event.altKey ||
+        ['F5', 'F11', 'F12', 'Tab'].includes(key) ||
+        ['F5', 'F11', 'F12', 'Tab'].includes(code)
+      ) {
+        try {
+          event.preventDefault();
+          event.stopPropagation();
+        } catch (err) {}
+      }
+      return;
     }
 
     const isModifierPressed = event.ctrlKey || event.metaKey || event.altKey;
     const activeQuest = this.getCurrentQuest();
     const isTargetMatch = matchesShortcut(event, activeQuest, this.currentOS);
+    const isTrainerFunctionKey =
+      ['F5', 'F11', 'F12'].includes(key) || ['F5', 'F11', 'F12'].includes(code);
 
-    const restrictedKeys = ['w', 't', 'l', 'd', 'h', 'j', 'f', 'r', 'n', 's', 'p', 'u', 'b', 'e', 'm', 'c', 'tab', 'arrowright', 'arrowleft', '+', '-', '=', '0', '1', 'delete'];
+    const restrictedKeys = ['w', 't', 'l', 'd', 'h', 'j', 'f', 'r', 'n', 's', 'p', 'u', 'b', 'e', 'm', 'c', 'tab', 'arrowright', 'arrowleft', '+', '-', '=', '0', '1', 'delete', 'backspace', 'y', '[', ']'];
     const keyLower = key.toLowerCase();
 
     // Prevent default browser accelerator actions
@@ -528,12 +826,24 @@ class GameOfChromesApp {
       }
     }
 
-    // Also prevent F-key defaults
-    if (['F5', 'F11', 'F12'].includes(key)) {
+    // Function keys Chrome owns unless Keyboard Lock is armed in JS fullscreen
+    if (isTrainerFunctionKey) {
       try {
         event.preventDefault();
         event.stopPropagation();
+        if (this.keyboardLockActive) {
+          event.stopImmediatePropagation();
+        }
       } catch (err) {}
+
+      // Without lock: if F12/F11 never "matches" due to odd event shapes, still hint
+      if (!this.keyboardLockActive && KEYBOARD_LOCK_QUEST_IDS.has(activeQuest?.id) && !isTargetMatch) {
+        const hint = this.getReservedKeyHint(activeQuest);
+        if (hint) {
+          this.dom.questFeedback.textContent = `🛡️ ${hint}`;
+          this.dom.questFeedback.className = 'quest-feedback error';
+        }
+      }
     }
 
     // Highlight keycaps visually in real-time
@@ -545,12 +855,9 @@ class GameOfChromesApp {
         event.stopPropagation();
         event.stopImmediatePropagation();
       } catch (e) {}
-      // BUG FIX: Guard against rapid-mash exploit during transition
-      if (!this.isTransitioning) {
-        this.handleSuccessStrike(activeQuest);
-      }
+      this.handleSuccessStrike(activeQuest);
     } else if (
-      (isModifierPressed || ['F5', 'F11', 'F12'].includes(key)) &&
+      (isModifierPressed || isTrainerFunctionKey) &&
       key !== 'Control' && key !== 'Meta' && key !== 'Shift' && key !== 'Alt'
     ) {
       this.handleFailedStrike(activeQuest);
@@ -579,10 +886,10 @@ class GameOfChromesApp {
       if (text === 'tab' && event.key === 'Tab') match = true;
       if (text === '+' && (event.key === '+' || event.key === '=')) match = true;
       if (text === '−' && (event.key === '-' || event.key === '_')) match = true;
-      if (text === 'delete' && (event.key === 'Delete' || event.key === 'Backspace')) match = true;
-      if (text === 'f5' && event.key === 'F5') match = true;
-      if (text === 'f11' && event.key === 'F11') match = true;
-      if (text === 'f12' && event.key === 'F12') match = true;
+      if ((text === 'delete' || text === 'backspace') && (event.key === 'Delete' || event.key === 'Backspace')) match = true;
+      if (text === 'f5' && (event.key === 'F5' || event.code === 'F5')) match = true;
+      if (text === 'f11' && (event.key === 'F11' || event.code === 'F11')) match = true;
+      if (text === 'f12' && (event.key === 'F12' || event.code === 'F12')) match = true;
 
       if (match) {
         cap.classList.toggle('active-press', isDown);
@@ -609,8 +916,9 @@ class GameOfChromesApp {
     if (this.speedDemonTimestamps.length > 5) this.speedDemonTimestamps.shift();
 
     // 1. Audio Fanfare (combo escalation)
-    if (this.combo >= 3) {
-      window.soundEngine.playComboStrike?.(this.combo) || window.soundEngine.playSwordClash();
+    // Note: optional-call returns undefined, so never chain with || (that double-plays)
+    if (this.combo >= 3 && typeof window.soundEngine.playComboStrike === 'function') {
+      window.soundEngine.playComboStrike(this.combo);
     } else {
       window.soundEngine.playSwordClash();
     }
@@ -618,6 +926,8 @@ class GameOfChromesApp {
     // 2. Combo & Score
     this.combo += 1;
     this.sessionCorrect += 1;
+    this.lifetimeCorrect += 1;
+    localStorage.setItem('goc_total_correct', this.lifetimeCorrect.toString());
     if (this.gameMode === 'campaign') {
       this.sessionCampaignCorrect += 1;
       this.sessionCampaignTotal += 1;
@@ -687,12 +997,25 @@ class GameOfChromesApp {
 
   // --- Failure / Hint Handler ---
   handleFailedStrike(quest) {
+    if (this.isTransitioning) return;
+
     window.soundEngine.playShieldThud();
     this.combo = 0;
     this.sessionIncorrect += 1;
+    this.lifetimeIncorrect += 1;
+    localStorage.setItem('goc_total_incorrect', this.lifetimeIncorrect.toString());
     if (this.gameMode === 'campaign') {
       this.sessionCampaignTotal += 1;
     }
+
+    // Count failed attempts toward mastery tracking
+    if (quest?.id) {
+      const masteryEntry = this.masteryData[quest.id] || { successes: 0, attempts: 0, totalReactionMs: 0 };
+      masteryEntry.attempts += 1;
+      this.masteryData[quest.id] = masteryEntry;
+      this.saveMastery();
+    }
+
     this.updateComboUI();
 
     // Shake Command Deck
@@ -730,6 +1053,7 @@ class GameOfChromesApp {
   // --- XP & Rank Progression ---
   addXP(amount) {
     const oldRank = this.currentRank;
+    if (!Number.isFinite(this.xp)) this.xp = 0;
     this.xp += amount;
     localStorage.setItem('goc_xp', this.xp.toString());
 
@@ -791,7 +1115,7 @@ class GameOfChromesApp {
     });
 
     const state = {
-      totalCorrect: this.sessionCorrect + parseInt(localStorage.getItem('goc_total_correct') || '0', 10),
+      totalCorrect: this.lifetimeCorrect,
       bestStreak: this.bestStreak,
       speedDemonTriggered,
       realmMastery,
@@ -801,9 +1125,6 @@ class GameOfChromesApp {
       perfectRun,
       currentRankNum: this.currentRank.rank
     };
-
-    // Save total correct
-    localStorage.setItem('goc_total_correct', state.totalCorrect.toString());
 
     ACHIEVEMENTS.forEach(ach => {
       if (!this.unlockedAchievements.has(ach.id) && ach.condition(state)) {
@@ -816,8 +1137,12 @@ class GameOfChromesApp {
     this.unlockedAchievements.add(achievement.id);
     localStorage.setItem('goc_achievements', JSON.stringify([...this.unlockedAchievements]));
 
-    // Play achievement chime
-    window.soundEngine.playAchievementChime?.() || window.soundEngine.playMagicChime();
+    // Play achievement chime (avoid || fallback double-play when method returns undefined)
+    if (typeof window.soundEngine.playAchievementChime === 'function') {
+      window.soundEngine.playAchievementChime();
+    } else {
+      window.soundEngine.playMagicChime();
+    }
 
     // Show toast notification
     this.showAchievementToast(achievement);
@@ -852,9 +1177,9 @@ class GameOfChromesApp {
 
   // --- Stats Dashboard Rendering ---
   renderStatsModal() {
-    // Total stats
-    const totalCorrect = this.sessionCorrect + parseInt(localStorage.getItem('goc_total_correct') || '0', 10);
-    const totalAttempts = totalCorrect + this.sessionIncorrect;
+    // Total stats (lifetime counters — never re-add session totals on top of storage)
+    const totalCorrect = this.lifetimeCorrect;
+    const totalAttempts = this.lifetimeCorrect + this.lifetimeIncorrect;
     const accuracy = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
     const avgReaction = this.reactionTimes.length > 0
       ? Math.round(this.reactionTimes.reduce((a, b) => a + b, 0) / this.reactionTimes.length)
@@ -938,7 +1263,7 @@ class GameOfChromesApp {
 
     setTimeout(() => {
       toast.remove();
-    }, isCritical ? 1500 : 1200);
+    }, isCritical ? 2200 : 2000);
   }
 
   spawnSwordClash() {
@@ -974,10 +1299,8 @@ class GameOfChromesApp {
   startCombatTrial() {
     this.combatTimeLeft = 60;
     this.combatScore = 0;
-    this.sessionCampaignCorrect = 0;
-    this.sessionCampaignTotal = 0;
+    // Do NOT reset sessionCampaign* here — that wiped perfect-run progress mid-session
 
-    // BUG FIX: combatHud and combatTimerDisplay now properly cached in this.dom
     if (this.dom.combatHud) this.dom.combatHud.style.display = 'flex';
     if (this.dom.combatTimerDisplay) this.dom.combatTimerDisplay.textContent = `${this.combatTimeLeft}s`;
 
@@ -990,6 +1313,7 @@ class GameOfChromesApp {
 
       if (this.combatTimeLeft <= 0) {
         clearInterval(this.combatTimer);
+        this.combatTimer = null;
         this.endCombatTrial();
       }
     }, 1000);
@@ -999,6 +1323,7 @@ class GameOfChromesApp {
 
   stopCombatTrial() {
     clearInterval(this.combatTimer);
+    this.combatTimer = null;
     if (this.dom.combatHud) this.dom.combatHud.style.display = 'none';
   }
 
@@ -1078,7 +1403,18 @@ class GameOfChromesApp {
   }
 }
 
-// Boot application when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-  window.app = new GameOfChromesApp();
-});
+// Boot application when DOM is ready (modules can race DOMContentLoaded on some restores)
+function bootGameOfChromes() {
+  if (window.app) return;
+  try {
+    window.app = new GameOfChromesApp();
+  } catch (err) {
+    console.error('A Game of Chromes failed to boot:', err);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootGameOfChromes);
+} else {
+  bootGameOfChromes();
+}

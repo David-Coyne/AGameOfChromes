@@ -325,6 +325,21 @@ export class BrowserSimulator {
     this.isAnimEntering = false;
     this.bookmarksBarVisible = true;
 
+    // Chrome-like overlay / DevTools state
+    this.devtoolsOpen = false;
+    this.devtoolsTab = 'elements'; // elements | console | performance
+    this.inspectMode = false;
+    this.inspectTargetLabel = 'div.meme-picture-frame';
+    this.deviceMode = false;
+    this.simFullscreen = false;
+    this.downloadsShelfOpen = false;
+    this.downloadsPageOpen = false;
+    this.clearDataDialogOpen = false;
+    this.sourceOverlayOpen = false;
+    this.printOverlayOpen = false;
+    this.saveToastVisible = false;
+    this.findHighlightActive = false;
+
     this.render();
   }
 
@@ -380,9 +395,10 @@ export class BrowserSimulator {
     const win = this.container.querySelector('#chromeBrowserWindow');
     if (win) {
       win.appendChild(badge);
+      // Keep on-screen long enough to read (matches ~2.8s CSS animation)
       setTimeout(() => {
         if (badge.parentNode) badge.remove();
-      }, 1250);
+      }, 3000);
     }
   }
 
@@ -396,7 +412,7 @@ export class BrowserSimulator {
 
     this.container.innerHTML = `
       <!-- Authentic Chrome Browser Window Container -->
-      <div class="chrome-browser-window ${this.isIncognito ? 'chrome-incognito' : ''}" id="chromeBrowserWindow">
+      <div class="chrome-browser-window ${this.isIncognito ? 'chrome-incognito' : ''} ${this.simFullscreen ? 'sim-fullscreen' : ''}" id="chromeBrowserWindow">
         
         <!-- Authentic Chrome Tab Strip Bar -->
         <div class="chrome-tab-strip-bar">
@@ -461,16 +477,35 @@ export class BrowserSimulator {
         </div>
 
         <!-- Webpage Viewport Area (Displaying Clean Meme Pictures) -->
-        <div class="chrome-viewport ${this.isReloading ? 'reloading' : ''}" id="simViewport" style="transform: scale(${this.zoomLevel / 100}); transform-origin: top left;">
+        <div class="chrome-viewport ${this.isReloading ? 'reloading' : ''} ${this.inspectMode ? 'inspect-cursor' : ''} ${this.deviceMode ? 'device-mode-on' : ''} ${this.findHighlightActive ? 'find-highlights-on' : ''}" id="simViewport" style="transform: scale(${this.zoomLevel / 100}); transform-origin: top left;">
+          ${this.deviceMode ? '<div class="chrome-device-frame"><div class="chrome-device-notch"></div>' : ''}
           ${this.renderViewportContent()}
+          ${this.inspectMode ? this.renderInspectOverlay() : ''}
+          ${this.findHighlightActive ? this.renderFindHighlights() : ''}
+          ${this.deviceMode ? '</div>' : ''}
         </div>
 
         <!-- Chrome Find in Page Overlay -->
         <div class="chrome-find-bar ${this.findOverlayOpen ? 'active' : ''}" id="simFindBar">
           <input type="text" class="chrome-find-input" id="simFindInput" value="shortcuts" placeholder="Find in page..." />
-          <span class="chrome-find-status">1/3</span>
+          <span class="chrome-find-status">${this.findHighlightActive ? '2/4' : '1/3'}</span>
           <button class="chrome-find-btn" id="simFindClose">✕</button>
         </div>
+
+        <!-- Downloads shelf (Chrome bottom bar) -->
+        <div class="chrome-downloads-shelf ${this.downloadsShelfOpen ? 'open' : ''}" id="simDownloadsShelf">
+          <div class="chrome-dl-item">
+            <span class="chrome-dl-icon">📦</span>
+            <div class="chrome-dl-meta">
+              <strong>meme-pack.zip</strong>
+              <span>2.4 MB • Show in folder</span>
+            </div>
+            <button class="chrome-dl-link" id="simOpenDownloadsPage" type="button">Show all</button>
+            <button class="chrome-find-btn" id="simCloseDownloads" type="button">✕</button>
+          </div>
+        </div>
+
+        ${this.downloadsPageOpen ? this.renderDownloadsPage() : ''}
 
         <!-- Chrome History Side Drawer -->
         <div class="chrome-history-drawer ${this.historyPanelOpen ? 'open' : ''}" id="simHistoryDrawer">
@@ -486,10 +521,217 @@ export class BrowserSimulator {
             <li><span class="hist-time">08:00 AM</span> <strong>GigaChad Shortcut Club</strong> <br><em>reddit.com/r/gigachad</em></li>
           </ul>
         </div>
+
+        ${this.devtoolsOpen ? this.renderDevToolsDock() : ''}
+        ${this.clearDataDialogOpen ? this.renderClearDataDialog() : ''}
+        ${this.sourceOverlayOpen ? this.renderSourceOverlay() : ''}
+        ${this.printOverlayOpen ? this.renderPrintOverlay() : ''}
+        ${this.saveToastVisible ? this.renderSaveToast() : ''}
       </div>
     `;
 
     this.attachInternalListeners();
+    if (this.inspectMode) {
+      this.playInspectHighlightSequence();
+    }
+  }
+
+  renderInspectOverlay() {
+    return `
+      <div class="chrome-inspect-layer" id="simInspectLayer">
+        <div class="chrome-inspect-box" id="simInspectBox"></div>
+        <div class="chrome-inspect-tooltip" id="simInspectTooltip">${this.inspectTargetLabel}</div>
+      </div>
+    `;
+  }
+
+  renderFindHighlights() {
+    return `
+      <div class="chrome-find-highlights" aria-hidden="true">
+        <mark class="chrome-find-mark mark-1">shortcuts</mark>
+        <mark class="chrome-find-mark mark-2 current">shortcuts</mark>
+        <mark class="chrome-find-mark mark-3">shortcuts</mark>
+      </div>
+    `;
+  }
+
+  renderDevToolsDock() {
+    const tabs = [
+      { id: 'elements', label: 'Elements' },
+      { id: 'console', label: 'Console' },
+      { id: 'performance', label: 'Performance' }
+    ];
+    const tabButtons = tabs.map(t => `
+      <button class="devtools-tab ${this.devtoolsTab === t.id ? 'active' : ''}" data-dt-tab="${t.id}">${t.label}</button>
+    `).join('');
+
+    let body = '';
+    if (this.devtoolsTab === 'elements') {
+      body = `
+        <div class="devtools-elements-pane">
+          <div class="devtools-dom-tree">
+            <div class="dom-line">&lt;html&gt;</div>
+            <div class="dom-line indent1">&lt;body&gt;</div>
+            <div class="dom-line indent2">&lt;div class="chrome-webpage-surface"&gt;</div>
+            <div class="dom-line indent3 selected">&lt;div class="meme-picture-frame"&gt;</div>
+            <div class="dom-line indent4">&lt;div class="meme-top-text"&gt;...&lt;/div&gt;</div>
+            <div class="dom-line indent3">&lt;/div&gt;</div>
+            <div class="dom-line indent2">&lt;/div&gt;</div>
+            <div class="dom-line indent1">&lt;/body&gt;</div>
+            <div class="dom-line">&lt;/html&gt;</div>
+          </div>
+          <div class="devtools-styles-pane">
+            <div class="devtools-styles-title">Styles</div>
+            <div class="devtools-style-rule">
+              <code>element.style { }</code>
+            </div>
+            <div class="devtools-style-rule">
+              <code>.meme-picture-frame {</code>
+              <code class="prop">  display: flex;</code>
+              <code class="prop">  flex-direction: column;</code>
+              <code>}</code>
+            </div>
+          </div>
+        </div>
+      `;
+    } else if (this.devtoolsTab === 'console') {
+      body = `
+        <div class="devtools-console-pane">
+          <div class="console-line log"><span class="console-prompt">&gt;</span> console.log('House of Chrome online')</div>
+          <div class="console-line out">House of Chrome online</div>
+          <div class="console-line warn">⚠ [ShortcutTrainer] 30 quests forged</div>
+          <div class="console-input-row"><span>&gt;</span><span class="console-caret">|</span></div>
+        </div>
+      `;
+    } else {
+      body = `
+        <div class="devtools-perf-pane">
+          <div class="perf-toolbar">Recording… FPS 60 · JS Heap 42 MB</div>
+          <div class="perf-chart">
+            <div class="perf-bar" style="height:40%"></div>
+            <div class="perf-bar" style="height:70%"></div>
+            <div class="perf-bar" style="height:55%"></div>
+            <div class="perf-bar spike" style="height:95%"></div>
+            <div class="perf-bar" style="height:48%"></div>
+            <div class="perf-bar" style="height:62%"></div>
+            <div class="perf-bar" style="height:35%"></div>
+            <div class="perf-bar" style="height:58%"></div>
+          </div>
+          <div class="perf-legend">Main thread · Scripting · Rendering · Painting</div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="chrome-devtools-dock open" id="simDevToolsDock">
+        <div class="devtools-header">
+          <div class="devtools-tabs">${tabButtons}</div>
+          <button class="chrome-find-btn" id="simCloseDevTools" title="Close DevTools">✕</button>
+        </div>
+        <div class="devtools-body">${body}</div>
+      </div>
+    `;
+  }
+
+  renderClearDataDialog() {
+    return `
+      <div class="chrome-dialog-backdrop" id="simClearDataDialog">
+        <div class="chrome-dialog-card">
+          <h3>Clear browsing data</h3>
+          <label class="chrome-dialog-check"><input type="checkbox" checked disabled> Browsing history</label>
+          <label class="chrome-dialog-check"><input type="checkbox" checked disabled> Cookies and other site data</label>
+          <label class="chrome-dialog-check"><input type="checkbox" checked disabled> Cached images and files</label>
+          <div class="chrome-dialog-actions">
+            <button class="chrome-dialog-btn" id="simClearDataCancel">Cancel</button>
+            <button class="chrome-dialog-btn primary" id="simClearDataConfirm">Clear data</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  renderSourceOverlay() {
+    const active = this.getActiveTab();
+    const url = active?.url || 'about:blank';
+    return `
+      <div class="chrome-source-overlay" id="simSourceOverlay">
+        <div class="chrome-source-header">
+          <strong>view-source:${url}</strong>
+          <button class="chrome-find-btn" id="simCloseSource">✕</button>
+        </div>
+        <pre class="chrome-source-code">&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;
+    &lt;title&gt;${active?.title || 'Page'}&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body class="meme-realm"&gt;
+    &lt;div class="meme-picture-frame"&gt;…&lt;/div&gt;
+  &lt;/body&gt;
+&lt;/html&gt;</pre>
+      </div>
+    `;
+  }
+
+  renderPrintOverlay() {
+    return `
+      <div class="chrome-print-overlay" id="simPrintOverlay">
+        <div class="chrome-print-sheet">
+          <div class="print-preview-label">Print preview</div>
+          <div class="print-preview-page">Iron Browser • Shortcut Scroll</div>
+        </div>
+        <button class="chrome-dialog-btn primary" id="simClosePrint">Done</button>
+      </div>
+    `;
+  }
+
+  renderSaveToast() {
+    return `
+      <div class="chrome-save-toast" id="simSaveToast">
+        <span>💾</span> Page saved as <strong>shortcut-scroll.html</strong>
+      </div>
+    `;
+  }
+
+  renderDownloadsPage() {
+    const files = [
+      { icon: '📦', name: 'meme-pack.zip', meta: '2.4 MB — Today 10:42 AM', status: 'Complete', progress: 100 },
+      { icon: '🖼️', name: 'doge-wallpaper.png', meta: '1.1 MB — Today 9:15 AM', status: 'Complete', progress: 100 },
+      { icon: '📜', name: 'shortcut-grimoire.pdf', meta: '840 KB — Yesterday', status: 'Complete', progress: 100 },
+      { icon: '⚔️', name: 'iron-browser-installer.exe', meta: '48 MB — This week', status: 'Complete', progress: 100 }
+    ];
+    const rows = files.map(f => `
+      <div class="chrome-dl-page-row">
+        <span class="chrome-dl-page-icon">${f.icon}</span>
+        <div class="chrome-dl-page-info">
+          <div class="chrome-dl-page-name">${f.name}</div>
+          <div class="chrome-dl-page-meta">${f.meta}</div>
+          <div class="chrome-dl-progress-track"><div class="chrome-dl-progress-fill" style="width:${f.progress}%"></div></div>
+        </div>
+        <div class="chrome-dl-page-actions">
+          <span class="chrome-dl-status">${f.status}</span>
+          <button type="button" class="chrome-dl-link">Show in folder</button>
+        </div>
+      </div>
+    `).join('');
+
+    return `
+      <div class="chrome-downloads-page" id="simDownloadsPage">
+        <div class="chrome-dl-page-header">
+          <div class="chrome-dl-page-title-row">
+            <h2>Downloads</h2>
+            <button type="button" class="chrome-find-btn" id="simCloseDownloadsPage" title="Close">✕</button>
+          </div>
+          <div class="chrome-dl-page-search">
+            <span>🔍</span>
+            <input type="text" value="" placeholder="Search downloads" readonly />
+          </div>
+          <div class="chrome-dl-page-url">chrome://downloads</div>
+        </div>
+        <div class="chrome-dl-page-list">
+          ${rows}
+        </div>
+      </div>
+    `;
   }
 
   renderTabs() {
@@ -675,6 +917,7 @@ export class BrowserSimulator {
     if (findClose) {
       findClose.addEventListener('click', () => {
         this.findOverlayOpen = false;
+        this.findHighlightActive = false;
         this.render();
       });
     }
@@ -682,6 +925,71 @@ export class BrowserSimulator {
     if (histClose) {
       histClose.addEventListener('click', () => {
         this.historyPanelOpen = false;
+        this.render();
+      });
+    }
+
+    const dlClose = this.container.querySelector('#simCloseDownloads');
+    if (dlClose) {
+      dlClose.addEventListener('click', () => {
+        this.downloadsShelfOpen = false;
+        this.render();
+      });
+    }
+
+    const openDlPage = this.container.querySelector('#simOpenDownloadsPage');
+    if (openDlPage) {
+      openDlPage.addEventListener('click', () => {
+        this.downloadsPageOpen = true;
+        this.render();
+      });
+    }
+
+    const closeDlPage = this.container.querySelector('#simCloseDownloadsPage');
+    if (closeDlPage) {
+      closeDlPage.addEventListener('click', () => {
+        this.downloadsPageOpen = false;
+        this.render();
+      });
+    }
+
+    const dtClose = this.container.querySelector('#simCloseDevTools');
+    if (dtClose) {
+      dtClose.addEventListener('click', () => {
+        this.devtoolsOpen = false;
+        this.inspectMode = false;
+        this.render();
+      });
+    }
+
+    this.container.querySelectorAll('[data-dt-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.devtoolsTab = btn.dataset.dtTab;
+        this.render();
+      });
+    });
+
+    const clearCancel = this.container.querySelector('#simClearDataCancel');
+    const clearConfirm = this.container.querySelector('#simClearDataConfirm');
+    const closeClear = () => {
+      this.clearDataDialogOpen = false;
+      this.render();
+    };
+    if (clearCancel) clearCancel.addEventListener('click', closeClear);
+    if (clearConfirm) clearConfirm.addEventListener('click', closeClear);
+
+    const closeSource = this.container.querySelector('#simCloseSource');
+    if (closeSource) {
+      closeSource.addEventListener('click', () => {
+        this.sourceOverlayOpen = false;
+        this.render();
+      });
+    }
+
+    const closePrint = this.container.querySelector('#simClosePrint');
+    if (closePrint) {
+      closePrint.addEventListener('click', () => {
+        this.printOverlayOpen = false;
         this.render();
       });
     }
@@ -1110,9 +1418,17 @@ export class BrowserSimulator {
 
   triggerFind() {
     this.findOverlayOpen = !this.findOverlayOpen;
+    this.findHighlightActive = this.findOverlayOpen;
     this.render();
     if (this.findOverlayOpen) {
-      this.showActionBanner('FIND ON PAGE: Search rune bar opened!', '🔍');
+      this.showHeroBadge('FIND ON PAGE!', 'Matches highlighted in the scroll', '🔍');
+      setTimeout(() => {
+        const input = this.container.querySelector('#simFindInput');
+        if (input) {
+          input.focus();
+          input.select();
+        }
+      }, 40);
     }
     return this.findOverlayOpen ? '🔍 Find bar opened!' : '🔍 Find dismissed.';
   }
@@ -1121,14 +1437,14 @@ export class BrowserSimulator {
     this.historyPanelOpen = !this.historyPanelOpen;
     this.render();
     if (this.historyPanelOpen) {
-      this.showActionBanner('HISTORY CHRONICLE: Visited realms unrolled!', '📜');
+      this.showHeroBadge('HISTORY CHRONICLE!', 'Visited realms unrolled', '📜');
     }
     return this.historyPanelOpen ? '📜 Chrome History opened!' : '📜 History closed.';
   }
 
   zoomInWithAnim() {
     const res = this.zoomIn();
-    this.showActionBanner(`VIEWPORT MAGNIFIED: ${this.zoomLevel}% Zoom!`, '🔍');
+    this.showHeroBadge(`VIEWPORT MAGNIFIED!`, `${this.zoomLevel}% zoom`, '🔍');
     return res;
   }
 
@@ -1168,17 +1484,29 @@ export class BrowserSimulator {
   }
 
   goBackWithAnim() {
+    const active = this.getActiveTab();
+    const canGo = active && active.historyIndex > 0;
     this.navigateHistory(-1);
     this.triggerWarpSweep();
-    this.showHeroBadge('NAVIGATED BACK!', 'Returned to previous page', '⬅️');
-    return 'Navigated back!';
+    this.showHeroBadge(
+      canGo ? 'NAVIGATED BACK!' : 'END OF HISTORY!',
+      canGo ? 'Returned to previous page' : 'No earlier page in this tab',
+      '⬅️'
+    );
+    return canGo ? 'Navigated back!' : 'Already at oldest history entry.';
   }
 
   goForwardWithAnim() {
+    const active = this.getActiveTab();
+    const canGo = active && active.historyIndex < active.history.length - 1;
     this.navigateHistory(1);
     this.triggerWarpSweep();
-    this.showHeroBadge('NAVIGATED FORWARD!', 'Went to next page', '➡️');
-    return 'Navigated forward!';
+    this.showHeroBadge(
+      canGo ? 'NAVIGATED FORWARD!' : 'END OF HISTORY!',
+      canGo ? 'Went to next page' : 'No forward page in this tab',
+      '➡️'
+    );
+    return canGo ? 'Navigated forward!' : 'Already at newest history entry.';
   }
 
   reloadWithAnim() {
@@ -1195,23 +1523,60 @@ export class BrowserSimulator {
   }
 
   printPageAnim() {
-    this.triggerWarpSweep();
-    this.showHeroBadge('PRINT DIALOG!', 'Preparing paper copy', '🖨️');
+    this.printOverlayOpen = true;
+    this.sourceOverlayOpen = false;
+    this.render();
+    this.showHeroBadge('PRINT PREVIEW!', 'Preparing parchment copy', '🖨️');
+    setTimeout(() => {
+      this.printOverlayOpen = false;
+      this.render();
+    }, 2200);
     return 'Print dialog opened!';
   }
 
   savePageAnim() {
-    this.showHeroBadge('PAGE SAVED!', 'Saved for offline viewing', '💾');
+    this.saveToastVisible = true;
+    this.render();
+    this.showHeroBadge('PAGE ENGRAVED!', 'Saved for offline viewing', '💾');
+    setTimeout(() => {
+      this.saveToastVisible = false;
+      this.render();
+    }, 2000);
     return 'Page saved to scroll archive!';
   }
 
   viewSourceAnim() {
-    this.showHeroBadge('VIEW SOURCE!', 'HTML revealed', '📝');
+    this.sourceOverlayOpen = true;
+    this.devtoolsOpen = false;
+    this.render();
+    this.showHeroBadge('VIEW SOURCE!', 'Raw HTML revealed', '📝');
     return 'Source code revealed!';
   }
 
   openDownloadsAnim() {
-    this.showHeroBadge('DOWNLOADS VAULT!', 'Opened downloaded files', '📦');
+    // Chrome-like: open chrome://downloads page + bottom download shelf
+    this.downloadsPageOpen = true;
+    this.downloadsShelfOpen = true;
+    this.sourceOverlayOpen = false;
+    this.printOverlayOpen = false;
+    this.clearDataDialogOpen = false;
+    this.historyPanelOpen = false;
+    this.findOverlayOpen = false;
+    this.findHighlightActive = false;
+
+    // Reflect chrome://downloads in the omnibox
+    const active = this.getActiveTab();
+    if (active) {
+      active._prevUrl = active._prevUrl || active.url;
+      active._prevTitle = active._prevTitle || active.title;
+      active.url = 'chrome://downloads';
+      active.title = 'Downloads';
+      active.icon = '📦';
+    }
+
+    this.render();
+    this.triggerWarpSweep();
+    this.showHeroBadge('DOWNLOADS OPENED!', 'chrome://downloads — treasure vault unlocked', '📦');
     return 'Downloads page opened!';
   }
 
@@ -1223,14 +1588,22 @@ export class BrowserSimulator {
   }
 
   clearDataAnim() {
+    this.clearDataDialogOpen = true;
     this.triggerLaserSlash();
-    this.showHeroBadge('DATA PURGED!', 'History and cache erased', '🧹');
+    this.render();
+    this.showHeroBadge('CLEAR DATA DIALOG!', 'Purge the chronicles', '🧹');
+    setTimeout(() => {
+      if (this.clearDataDialogOpen) {
+        this.clearDataDialogOpen = false;
+        this.render();
+      }
+    }, 2400);
     return 'Browsing data cleared!';
   }
 
   zoomOutWithAnim() {
     this.zoomOut();
-    this.showHeroBadge(`VIEWPORT SHRUNK: ${this.zoomLevel}% Zoom!`, '🔍');
+    this.showHeroBadge('VIEWPORT SHRUNK!', `${this.zoomLevel}% zoom`, '🔍');
     return `Zoom level: ${this.zoomLevel}%`;
   }
 
@@ -1251,7 +1624,19 @@ export class BrowserSimulator {
   }
 
   toggleFullscreenAnim() {
-    this.showHeroBadge('FULLSCREEN!', 'Taking over the screen', '🖥️');
+    this.simFullscreen = !this.simFullscreen;
+    this.render();
+    const win = this.container.querySelector('#chromeBrowserWindow');
+    if (win) {
+      win.classList.remove('sim-fullscreen-pulse');
+      void win.offsetWidth;
+      win.classList.add('sim-fullscreen-pulse');
+    }
+    this.showHeroBadge(
+      this.simFullscreen ? 'SIM FULLSCREEN!' : 'WINDOWED AGAIN!',
+      this.simFullscreen ? 'Iron Browser fills the arena' : 'Chrome chrome restored',
+      '🖥️'
+    );
     return 'Fullscreen toggled!';
   }
 
@@ -1264,28 +1649,137 @@ export class BrowserSimulator {
     return 'No tabs open.';
   }
 
+  openDevToolsPanel(tab = 'elements') {
+    this.devtoolsOpen = true;
+    this.devtoolsTab = tab;
+    // Clear overlays that would cover the dock (downloads page was z-index above dock)
+    this.sourceOverlayOpen = false;
+    this.downloadsPageOpen = false;
+    this.printOverlayOpen = false;
+    this.clearDataDialogOpen = false;
+    this.findOverlayOpen = false;
+    this.findHighlightActive = false;
+    this.inspectMode = false;
+    this.render();
+  }
+
   openDevToolsAnim() {
+    this.inspectMode = false;
+    this.openDevToolsPanel('elements');
     this.triggerWarpSweep();
-    this.showHeroBadge('DEVTOOLS FORGED!', 'Inspecting the DOM', '🔧');
+    const dock = this.container.querySelector('#simDevToolsDock');
+    if (dock) {
+      dock.classList.remove('devtools-flash-open');
+      void dock.offsetWidth;
+      dock.classList.add('devtools-flash-open');
+    }
+    this.showHeroBadge('DEVTOOLS OPENED!', 'F12 → Elements dock at the bottom', '🔧');
     return 'DevTools opened!';
   }
 
   openConsoleAnim() {
-    this.showHeroBadge('CONSOLE SUMMONED!', 'Ready for JS commands', '💻');
+    this.inspectMode = false;
+    this.openDevToolsPanel('console');
+    this.triggerWarpSweep();
+    const dock = this.container.querySelector('#simDevToolsDock');
+    if (dock) {
+      dock.classList.remove('devtools-flash-open');
+      void dock.offsetWidth;
+      dock.classList.add('devtools-flash-open');
+    }
+    // Ensure Console tab reads as active after render
+    const consoleTab = this.container.querySelector('[data-dt-tab="console"]');
+    if (consoleTab) consoleTab.classList.add('active');
+    this.showHeroBadge('CONSOLE OPENED!', 'Ctrl+Shift+J → Console dock ready', '💻');
     return 'JavaScript console opened!';
   }
 
   inspectElementAnim() {
-    this.showHeroBadge('INSPECT MODE!', 'Hover over elements', '🔍');
+    // Chrome-like inspect: crosshair → highlight sweep → Elements dock
+    clearTimeout(this._inspectOpenTimer);
+    clearInterval(this._inspectSweep);
+
+    this.downloadsPageOpen = false;
+    this.sourceOverlayOpen = false;
+    this.printOverlayOpen = false;
+    this.clearDataDialogOpen = false;
+    this.findOverlayOpen = false;
+    this.findHighlightActive = false;
+    this.devtoolsOpen = false;
+
+    this.inspectMode = true;
+    this.inspectTargetLabel = 'div.meme-picture-frame';
+    this.render();
+    this.showHeroBadge('INSPECT MODE!', 'Ctrl+Shift+C — crosshair locked on the DOM', '🔍');
+
+    // After highlight choreography, open Elements with selection
+    this._inspectOpenTimer = setTimeout(() => {
+      this.inspectMode = false;
+      this.openDevToolsPanel('elements');
+      const dock = this.container.querySelector('#simDevToolsDock');
+      if (dock) {
+        dock.classList.remove('devtools-flash-open');
+        void dock.offsetWidth;
+        dock.classList.add('devtools-flash-open');
+      }
+      this.showHeroBadge('ELEMENT SELECTED!', this.inspectTargetLabel, '🎯');
+    }, 1600);
+
     return 'Element inspector activated!';
   }
 
+  playInspectHighlightSequence() {
+    const box = this.container.querySelector('#simInspectBox');
+    const tip = this.container.querySelector('#simInspectTooltip');
+    const viewport = this.container.querySelector('#simViewport');
+    if (!box || !viewport) return;
+
+    const targets = [
+      { label: 'span.webpage-source', top: 8, left: 12, width: 46, height: 6 },
+      { label: 'div.meme-top-text', top: 18, left: 18, width: 64, height: 10 },
+      { label: 'div.meme-picture-frame', top: 22, left: 14, width: 72, height: 58 }
+    ];
+
+    let step = 0;
+    const applyStep = () => {
+      const t = targets[Math.min(step, targets.length - 1)];
+      this.inspectTargetLabel = t.label;
+      box.style.top = `${t.top}%`;
+      box.style.left = `${t.left}%`;
+      box.style.width = `${t.width}%`;
+      box.style.height = `${t.height}%`;
+      if (tip) tip.textContent = t.label;
+      box.classList.remove('inspect-flash');
+      void box.offsetWidth;
+      box.classList.add('inspect-flash');
+      step += 1;
+    };
+
+    applyStep();
+    clearInterval(this._inspectSweep);
+    this._inspectSweep = setInterval(() => {
+      if (step >= targets.length) {
+        clearInterval(this._inspectSweep);
+        return;
+      }
+      applyStep();
+    }, 420);
+  }
+
   toggleDeviceModeAnim() {
-    this.showHeroBadge('DEVICE MODE!', 'Mobile responsive view', '📱');
+    this.deviceMode = !this.deviceMode;
+    this.render();
+    this.showHeroBadge(
+      this.deviceMode ? 'DEVICE TOOLBAR!' : 'DESKTOP VIEW!',
+      this.deviceMode ? 'Mobile viewport shape-shifted' : 'Full desktop canvas restored',
+      '📱'
+    );
     return 'Device toolbar toggled!';
   }
 
   openPerformanceAnim() {
+    this.inspectMode = false;
+    this.openDevToolsPanel('performance');
     this.showHeroBadge('PERFORMANCE PANEL!', 'Profiling memory and CPU', '📈');
     return 'Performance panel opened!';
   }

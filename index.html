@@ -52,7 +52,7 @@
           <button class="os-toggle-btn" id="statsBtn" title="Open Performance Stats & Achievements">
             📊 Stats
           </button>
-          <button class="os-toggle-btn armor-btn" id="armorToggleBtn" title="Locks Ctrl+W & Tab shortcuts from closing the browser window using Fullscreen Armor">
+          <button class="os-toggle-btn armor-btn" id="armorToggleBtn" title="Enter Fullscreen Armor to capture F11, F12, Ctrl+W and other reserved Chrome keys via Keyboard Lock">
             🛡️ Fullscreen Mode
           </button>
           <button class="os-toggle-btn" id="popupWindowBtn" title="Launch in dedicated App window">
@@ -177,13 +177,14 @@
       <div class="rank-crest-large">🐉</div>
       <h2 class="rank-up-title">ENTER THE IRON ARENA</h2>
       <p class="rank-up-desc">
-        To prevent Google Chrome from closing your browser tab during <strong>Ctrl + W</strong> quests, enter Fullscreen Battle Mode now!
+        Chrome steals <strong>Ctrl+W</strong>, <strong>F11</strong>, and <strong>F12</strong> in windowed mode.
+        Enter Fullscreen Battle Mode to arm Keyboard Lock so those keys train inside the Iron Browser!
       </p>
       <div class="modal-actions-row">
-        <button class="btn-primary modal-action-btn" id="welcomeFullscreenBtn">
+        <button type="button" class="btn-primary modal-action-btn" id="welcomeFullscreenBtn" autofocus>
           🛡️ Enter Fullscreen Mode <span class="enter-key-badge">↵ Enter</span>
         </button>
-        <button class="btn-secondary modal-action-btn" id="welcomeWindowedBtn">
+        <button type="button" class="btn-secondary modal-action-btn" id="welcomeWindowedBtn">
           🗡️ Continue Windowed <span class="enter-key-badge">Esc</span>
         </button>
       </div>
@@ -275,6 +276,67 @@
 
   <!-- Audio Synthesizer Engine -->
   <script src="audio.js"></script>
+  <!--
+    Early classic script: after reload, focus often stays in Chrome's omnibox so page
+    keydown never runs (Enter appears as a complete no-op). Arm focus immediately and
+    provide a fallback confirm path before the ES module finishes booting.
+  -->
+  <script>
+    (function () {
+      window.__gocStart = {
+        confirmed: false,
+        pendingFullscreen: null,
+        armFocus: function () {
+          if (this.confirmed) return;
+          var modal = document.getElementById('welcomeModal');
+          if (!modal || !modal.classList.contains('show')) return;
+          var btn = document.getElementById('welcomeFullscreenBtn');
+          if (!btn) return;
+          try { window.focus(); } catch (e) {}
+          try { btn.focus({ preventScroll: true }); } catch (e) {
+            try { btn.focus(); } catch (e2) {}
+          }
+        },
+        confirm: function (fullscreen) {
+          if (this.confirmed) return;
+          var modal = document.getElementById('welcomeModal');
+          if (!modal || !modal.classList.contains('show')) return;
+          if (window.app && typeof window.app.confirmStartModal === 'function') {
+            window.app.confirmStartModal({ fullscreen: !!fullscreen });
+            return;
+          }
+          this.confirmed = true;
+          modal.classList.remove('show');
+          this.pendingFullscreen = !!fullscreen;
+          if (fullscreen && document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(function () {});
+          }
+        }
+      };
+
+      function arm() { window.__gocStart.armFocus(); }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', arm);
+      } else {
+        arm();
+      }
+      window.addEventListener('load', arm);
+
+      window.addEventListener('keydown', function (e) {
+        var modal = document.getElementById('welcomeModal');
+        if (!modal || !modal.classList.contains('show') || window.__gocStart.confirmed) return;
+        var key = e.key || '';
+        var code = e.code || '';
+        var isEnter = key === 'Enter' || code === 'Enter' || code === 'NumpadEnter';
+        var isEsc = key === 'Escape' || code === 'Escape';
+        if (!isEnter && !isEsc) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+        window.__gocStart.confirm(isEnter);
+      }, true);
+    })();
+  </script>
   <!-- Main Application Logic (ES Module) -->
   <script type="module" src="app.js"></script>
 </body>

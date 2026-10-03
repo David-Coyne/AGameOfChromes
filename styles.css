@@ -1205,82 +1205,91 @@ body {
   100% { left: 140%; }
 }
 
-/* 3. Cinematic Hero Change Badge (Centered in the browser viewport - CANNOT MISS IT!) */
+/* 3. Cinematic Hero Change Badge — crisp, slow, readable (no exit blur) */
 .cinematic-hero-badge {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%) scale(0.85);
-  z-index: 65;
-  background: rgba(8, 12, 22, 0.96);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  transform: translate(-50%, -50%) scale(1);
+  z-index: 80;
+  background: rgba(10, 14, 24, 0.97);
+  /* Soft dim only — heavy backdrop-filter + blur filters made text look pixelated */
   border: 3px solid #ffd700;
-  border-radius: 18px;
-  padding: 1.25rem 2.4rem;
+  border-radius: 16px;
+  padding: 1.35rem 2.5rem;
   display: flex;
   align-items: center;
-  gap: 1.25rem;
-  box-shadow: 0 0 50px rgba(255, 215, 0, 0.7), 0 25px 60px rgba(0, 0, 0, 0.95);
+  gap: 1.15rem;
+  max-width: min(92%, 520px);
+  box-shadow: 0 0 40px rgba(255, 215, 0, 0.45), 0 18px 48px rgba(0, 0, 0, 0.9);
   pointer-events: none;
-  animation: heroBadgeAnim 1.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: heroBadgeAnim 2.8s ease-in-out forwards;
+  /* Keep rasterization crisp while scaling */
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
 }
 
 @keyframes heroBadgeAnim {
   0% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.5);
+    transform: translate3d(-50%, -46%, 0) scale(0.92);
   }
-  18% {
+  12% {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1.1);
+    transform: translate3d(-50%, -50%, 0) scale(1);
   }
-  28% {
-    transform: translate(-50%, -50%) scale(1);
-  }
-  80% {
+  78% {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    transform: translate3d(-50%, -50%, 0) scale(1);
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(1.12);
-    filter: blur(4px);
+    transform: translate3d(-50%, -54%, 0) scale(1);
+    /* No filter: blur — that was the pixelated flash */
   }
 }
 
 .hero-badge-icon {
-  font-size: 3.2rem;
-  animation: badgeIconSpin 0.5s ease-out;
+  font-size: 2.75rem;
+  line-height: 1;
+  flex-shrink: 0;
+  /* Gentler settle — no wild spin scale that softens glyphs */
+  animation: badgeIconSettle 0.55s ease-out;
 }
 
-@keyframes badgeIconSpin {
-  0% { transform: scale(0.2) rotate(-90deg); }
-  100% { transform: scale(1) rotate(0deg); }
+@keyframes badgeIconSettle {
+  0% { transform: scale(0.85); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .hero-badge-text-group {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.35rem;
+  min-width: 0;
 }
 
 .hero-badge-title {
   font-family: var(--font-title);
-  font-size: 1.65rem;
+  font-size: clamp(1.35rem, 2.4vw, 1.85rem);
   font-weight: 900;
-  color: #ffd700;
-  letter-spacing: 2px;
-  text-shadow: 0 0 15px rgba(255, 215, 0, 0.8), 0 2px 4px #000;
-  line-height: 1.1;
+  color: #ffe566;
+  letter-spacing: 1.5px;
+  text-shadow: 0 1px 0 #000, 0 0 12px rgba(255, 215, 0, 0.55);
+  line-height: 1.25;
+  word-break: break-word;
 }
 
 .hero-badge-desc {
   font-family: var(--font-mono);
-  font-size: 0.95rem;
-  color: #e2e8f0;
+  font-size: clamp(0.95rem, 1.5vw, 1.1rem);
+  color: #f1f5f9;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  word-break: break-word;
 }
 
 /* 4. Shockwave Meme Reveal Animation */
@@ -1387,23 +1396,27 @@ body {
    ANIMATIONS & OVERLAYS (Sword strike, Level up modal, Combos)
    ========================================================================== */
 
-/* Floating XP Toast */
+/* Floating XP Toast — slower, crisp, no blur filters */
 .xp-toast {
   position: fixed;
   font-family: var(--font-title);
-  font-size: 1.4rem;
+  font-size: 1.55rem;
   font-weight: 900;
-  color: var(--gold-light);
-  text-shadow: 0 0 10px var(--gold-glow), 0 2px 4px #000;
+  color: #ffe566;
+  text-shadow: 0 1px 0 #000, 0 0 10px rgba(255, 215, 0, 0.55);
   pointer-events: none;
   z-index: 1000;
-  animation: float-up-fade 1.2s forwards ease-out;
+  letter-spacing: 0.5px;
+  line-height: 1.3;
+  -webkit-font-smoothing: antialiased;
+  animation: float-up-fade 2s forwards ease-out;
 }
 
 @keyframes float-up-fade {
-  0% { transform: translate(-50%, 0) scale(0.8); opacity: 0; }
-  20% { transform: translate(-50%, -20px) scale(1.2); opacity: 1; }
-  100% { transform: translate(-50%, -80px) scale(1); opacity: 0; }
+  0% { transform: translate(-50%, 0) scale(0.96); opacity: 0; }
+  12% { transform: translate(-50%, -16px) scale(1); opacity: 1; }
+  72% { transform: translate(-50%, -40px) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -64px) scale(1); opacity: 0; }
 }
 
 /* Sword Clash Flash Effect */
@@ -2167,15 +2180,20 @@ body {
   }
 
   .hero-badge-title {
-    font-size: 1.2rem;
+    font-size: 1.25rem;
+    line-height: 1.3;
+  }
+
+  .hero-badge-desc {
+    font-size: 0.9rem;
   }
 
   .hero-badge-icon {
-    font-size: 2.2rem;
+    font-size: 2.1rem;
   }
 
   .cinematic-hero-badge {
-    padding: 0.85rem 1.5rem;
+    padding: 1rem 1.35rem;
     gap: 0.75rem;
   }
 
@@ -2225,4 +2243,661 @@ body {
   .app-container {
     gap: 0.4rem;
   }
+}
+
+/* =============================================
+   Chrome-like DevTools / Inspect / Overlay UI
+   ============================================= */
+
+.chrome-viewport {
+  position: relative;
+}
+
+.chrome-viewport.inspect-cursor,
+.chrome-viewport.inspect-cursor * {
+  cursor: crosshair !important;
+}
+
+.chrome-inspect-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  background: rgba(8, 12, 24, 0.18);
+}
+
+.chrome-inspect-box {
+  position: absolute;
+  border: 2px solid #4f9cff;
+  background: rgba(79, 156, 255, 0.18);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35), inset 0 0 0 1px rgba(255, 100, 50, 0.35);
+  border-radius: 2px;
+  transition: top 0.28s ease, left 0.28s ease, width 0.28s ease, height 0.28s ease;
+}
+
+.chrome-inspect-box.inspect-flash {
+  animation: inspectPulse 0.4s ease;
+}
+
+@keyframes inspectPulse {
+  0% { filter: brightness(1.4); }
+  100% { filter: brightness(1); }
+}
+
+.chrome-inspect-tooltip {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: #1a73e8;
+  color: #fff;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.45rem;
+  border-radius: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  z-index: 41;
+}
+
+.chrome-find-highlights {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 15;
+}
+
+.chrome-find-mark {
+  position: absolute;
+  background: #fbbf24;
+  color: #111;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 0.05rem 0.25rem;
+  border-radius: 2px;
+  opacity: 0.92;
+}
+
+.chrome-find-mark.current {
+  background: #f97316;
+  outline: 2px solid #fff;
+}
+
+.chrome-find-mark.mark-1 { top: 28%; left: 22%; }
+.chrome-find-mark.mark-2 { top: 48%; left: 40%; }
+.chrome-find-mark.mark-3 { top: 66%; left: 30%; }
+
+.chrome-device-frame {
+  width: min(360px, 92%);
+  margin: 0.75rem auto;
+  border: 10px solid #1f2937;
+  border-radius: 28px;
+  background: #0b1220;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  position: relative;
+  max-height: 100%;
+}
+
+.chrome-device-notch {
+  width: 86px;
+  height: 10px;
+  background: #111827;
+  border-radius: 0 0 10px 10px;
+  margin: 0 auto 0.35rem;
+}
+
+.chrome-viewport.device-mode-on {
+  display: flex;
+  justify-content: center;
+  background:
+    radial-gradient(circle at top, rgba(56, 189, 248, 0.12), transparent 45%),
+    #0a0f1a;
+  overflow: auto;
+}
+
+.chrome-browser-window.sim-fullscreen {
+  position: relative;
+  border-radius: 0 !important;
+  box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.35), 0 0 40px rgba(255, 215, 0, 0.15);
+}
+
+.chrome-browser-window.sim-fullscreen .chrome-tab-strip-bar,
+.chrome-browser-window.sim-fullscreen .chrome-bookmarks-bar {
+  opacity: 0.35;
+}
+
+.sim-fullscreen-pulse {
+  animation: simFsPulse 0.55s ease;
+}
+
+@keyframes simFsPulse {
+  0% { transform: scale(0.985); }
+  60% { transform: scale(1.01); }
+  100% { transform: scale(1); }
+}
+
+.chrome-downloads-shelf {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+  background: #202124;
+  border: 1px solid #3c4043;
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  transform: translateY(120%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+  z-index: 55;
+}
+
+.chrome-downloads-shelf.open {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chrome-dl-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: #e8eaed;
+}
+
+.chrome-dl-icon { font-size: 1.25rem; }
+.chrome-dl-meta {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  font-size: 0.78rem;
+}
+.chrome-dl-meta span { color: #9aa0a6; }
+
+.chrome-dl-link {
+  background: transparent;
+  border: none;
+  color: #8ab4f8;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 0.2rem 0.35rem;
+}
+.chrome-dl-link:hover { text-decoration: underline; }
+
+/* Full chrome://downloads page panel */
+.chrome-downloads-page {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  background: #202124;
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.25s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.chrome-dl-page-header {
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid #3c4043;
+  background: #292a2d;
+}
+
+.chrome-dl-page-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.chrome-dl-page-title-row h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 500;
+  color: #e8eaed;
+}
+
+.chrome-dl-page-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #202124;
+  border: 1px solid #5f6368;
+  border-radius: 20px;
+  padding: 0.4rem 0.85rem;
+  margin-bottom: 0.45rem;
+}
+
+.chrome-dl-page-search input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e8eaed;
+  font-size: 0.85rem;
+}
+
+.chrome-dl-page-url {
+  font-size: 0.7rem;
+  color: #9aa0a6;
+  font-family: ui-monospace, monospace;
+}
+
+.chrome-dl-page-list {
+  flex: 1;
+  overflow: auto;
+  padding: 0.5rem 0;
+}
+
+.chrome-dl-page-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid #3c4043;
+  color: #e8eaed;
+}
+
+.chrome-dl-page-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.chrome-dl-page-icon {
+  font-size: 1.6rem;
+  width: 2rem;
+  text-align: center;
+}
+
+.chrome-dl-page-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.chrome-dl-page-name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #8ab4f8;
+  margin-bottom: 0.15rem;
+}
+
+.chrome-dl-page-meta {
+  font-size: 0.75rem;
+  color: #9aa0a6;
+  margin-bottom: 0.35rem;
+}
+
+.chrome-dl-progress-track {
+  height: 3px;
+  background: #3c4043;
+  border-radius: 2px;
+  overflow: hidden;
+  max-width: 280px;
+}
+
+.chrome-dl-progress-fill {
+  height: 100%;
+  background: #1a73e8;
+  border-radius: 2px;
+}
+
+.chrome-dl-page-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.chrome-dl-status {
+  font-size: 0.72rem;
+  color: #81c995;
+  font-weight: 600;
+}
+
+.chrome-devtools-dock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 46%;
+  min-height: 180px;
+  background: #202124;
+  border-top: 2px solid #8ab4f8;
+  display: flex;
+  flex-direction: column;
+  z-index: 85;
+  animation: dockRise 0.35s ease;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55);
+}
+
+.chrome-devtools-dock.devtools-flash-open {
+  animation: dockRise 0.35s ease, dockGlow 0.9s ease;
+}
+
+@keyframes dockRise {
+  from { transform: translateY(40%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes dockGlow {
+  0% { box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55), 0 0 0 rgba(138, 180, 248, 0); }
+  40% { box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55), 0 0 28px rgba(138, 180, 248, 0.55); }
+  100% { box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55), 0 0 0 rgba(138, 180, 248, 0); }
+}
+
+.devtools-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.25rem 0.45rem;
+  background: #292a2d;
+  border-bottom: 1px solid #3c4043;
+}
+
+.devtools-tabs {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.devtools-tab {
+  background: transparent;
+  border: none;
+  color: #9aa0a6;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.35rem 0.55rem;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+}
+
+.devtools-tab.active {
+  color: #8ab4f8;
+  box-shadow: inset 0 -2px 0 #8ab4f8;
+  background: rgba(138, 180, 248, 0.08);
+}
+
+.devtools-body {
+  flex: 1;
+  overflow: auto;
+  color: #e8eaed;
+  font-size: 0.72rem;
+}
+
+.devtools-elements-pane {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  height: 100%;
+  min-height: 120px;
+}
+
+.devtools-dom-tree {
+  padding: 0.45rem 0.55rem;
+  border-right: 1px solid #3c4043;
+  overflow: auto;
+}
+
+.dom-line {
+  white-space: nowrap;
+  color: #9aa0a6;
+  padding: 0.08rem 0.2rem;
+  border-radius: 2px;
+}
+
+.dom-line.indent1 { padding-left: 0.9rem; }
+.dom-line.indent2 { padding-left: 1.7rem; }
+.dom-line.indent3 { padding-left: 2.5rem; }
+.dom-line.indent4 { padding-left: 3.3rem; color: #c6c6c6; }
+
+.dom-line.selected {
+  background: #193660;
+  color: #fff;
+  outline: 1px solid #4f9cff;
+}
+
+.devtools-styles-pane {
+  padding: 0.45rem 0.55rem;
+  overflow: auto;
+}
+
+.devtools-styles-title {
+  color: #9aa0a6;
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.65rem;
+}
+
+.devtools-style-rule {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin-bottom: 0.55rem;
+}
+
+.devtools-style-rule code {
+  color: #e8eaed;
+}
+
+.devtools-style-rule code.prop {
+  color: #cfd2d4;
+  padding-left: 0.35rem;
+}
+
+.devtools-console-pane {
+  padding: 0.5rem 0.65rem;
+}
+
+.console-line { margin-bottom: 0.25rem; }
+.console-line.log { color: #e8eaed; }
+.console-line.out { color: #9aa0a6; padding-left: 0.85rem; }
+.console-line.warn { color: #f9ab00; }
+.console-prompt { color: #8ab4f8; margin-right: 0.35rem; }
+.console-input-row { margin-top: 0.45rem; color: #8ab4f8; }
+.console-caret { animation: caretBlink 1s step-end infinite; }
+
+@keyframes caretBlink {
+  50% { opacity: 0; }
+}
+
+.devtools-perf-pane {
+  padding: 0.5rem 0.65rem;
+}
+
+.perf-toolbar {
+  color: #9aa0a6;
+  margin-bottom: 0.45rem;
+}
+
+.perf-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.35rem;
+  height: 90px;
+  padding: 0.35rem;
+  background: #17181a;
+  border: 1px solid #3c4043;
+  border-radius: 4px;
+}
+
+.perf-bar {
+  flex: 1;
+  background: linear-gradient(180deg, #8ab4f8, #1a73e8);
+  border-radius: 2px 2px 0 0;
+  animation: perfRise 0.55s ease;
+}
+
+.perf-bar.spike {
+  background: linear-gradient(180deg, #fdd663, #f9ab00);
+}
+
+@keyframes perfRise {
+  from { transform: scaleY(0.2); transform-origin: bottom; }
+}
+
+.perf-legend {
+  margin-top: 0.35rem;
+  color: #9aa0a6;
+  font-size: 0.65rem;
+}
+
+.chrome-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 70;
+  animation: fadeIn 0.2s ease;
+}
+
+.chrome-dialog-card {
+  width: min(360px, 92%);
+  background: #292a2d;
+  border: 1px solid #5f6368;
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  color: #e8eaed;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+
+.chrome-dialog-card h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.chrome-dialog-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  margin-bottom: 0.45rem;
+  color: #dadce0;
+}
+
+.chrome-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  margin-top: 0.9rem;
+}
+
+.chrome-dialog-btn {
+  border: 1px solid #5f6368;
+  background: #3c4043;
+  color: #e8eaed;
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.chrome-dialog-btn.primary {
+  background: #8ab4f8;
+  color: #202124;
+  border-color: #8ab4f8;
+  font-weight: 700;
+}
+
+.chrome-source-overlay {
+  position: absolute;
+  inset: 0;
+  background: #202124;
+  z-index: 65;
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.2s ease;
+}
+
+.chrome-source-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.45rem 0.65rem;
+  background: #292a2d;
+  border-bottom: 1px solid #3c4043;
+  color: #e8eaed;
+  font-size: 0.78rem;
+}
+
+.chrome-source-code {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  color: #c6c6c6;
+  font-size: 0.75rem;
+  overflow: auto;
+  flex: 1;
+  white-space: pre-wrap;
+}
+
+.chrome-print-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(32, 33, 36, 0.92);
+  z-index: 68;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  animation: fadeIn 0.2s ease;
+}
+
+.chrome-print-sheet {
+  width: min(280px, 70%);
+  aspect-ratio: 8.5 / 11;
+  background: #fff;
+  color: #111;
+  border-radius: 2px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.print-preview-label {
+  font-size: 0.7rem;
+  color: #5f6368;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.print-preview-page {
+  flex: 1;
+  border: 1px dashed #dadce0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  text-align: center;
+  padding: 0.5rem;
+}
+
+.chrome-save-toast {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  background: #292a2d;
+  color: #e8eaed;
+  border: 1px solid #5f6368;
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.78rem;
+  z-index: 72;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  animation: toastIn 0.25s ease;
+}
+
+@keyframes toastIn {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
