@@ -91,7 +91,7 @@ const KEYBOARD_LOCK_CODES = [
   'KeyW', 'KeyT', 'KeyN', 'KeyH', 'KeyL', 'KeyD', 'KeyR', 'KeyS', 'KeyP',
   'KeyJ', 'KeyU', 'KeyB', 'KeyF', 'KeyE', 'KeyM', 'KeyC', 'KeyY', 'KeyI',
   'Digit0', 'Digit1',
-  'Tab', 'BracketLeft', 'BracketRight', 'equal', 'Minus', 'Delete', 'Backspace',
+  'Tab', 'BracketLeft', 'BracketRight', 'Equal', 'Minus', 'Delete', 'Backspace',
   // Function keys Chrome owns in windowed mode (F11 fullscreen, F12 DevTools, F5 reload)
   'F5', 'F11', 'F12'
 ];
