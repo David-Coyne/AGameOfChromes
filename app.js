@@ -793,7 +793,6 @@ class GameOfChromesApp {
 
     // Ignore further scoring while the quest is animating to the next one
     if (this.isTransitioning) {
-      const code = event.code || '';
       if (
         event.ctrlKey || event.metaKey || event.altKey ||
         ['F5', 'F11', 'F12', 'Tab'].includes(key) ||
@@ -810,7 +809,6 @@ class GameOfChromesApp {
     const isModifierPressed = event.ctrlKey || event.metaKey || event.altKey;
     const activeQuest = this.getCurrentQuest();
     const isTargetMatch = matchesShortcut(event, activeQuest, this.currentOS);
-    const code = event.code || '';
     const isTrainerFunctionKey =
       ['F5', 'F11', 'F12'].includes(key) || ['F5', 'F11', 'F12'].includes(code);
 
