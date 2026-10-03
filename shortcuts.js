@@ -4,7 +4,7 @@
  */
 
 // OS Detection
-export function detectOS() {
+function detectOS() {
   const nav = window.navigator;
   const userAgent = (nav.userAgent || '').toLowerCase();
   const platform = (nav.platform || '').toLowerCase();
@@ -21,7 +21,7 @@ export function detectOS() {
   return 'windows'; // Default to Windows/Linux (Ctrl keymap)
 }
 
-export const REALMS = [
+const REALMS = [
   { id: 'iron_tabs', name: 'The Iron Tabs', icon: '📑', description: 'Master the ancient art of tab warfare' },
   { id: 'navigator_guild', name: "The Navigator's Guild", icon: '🧭', description: 'Chart your course through the browser realm' },
   { id: 'arcane_library', name: 'The Arcane Library', icon: '📖', description: 'Unlock the secrets of page mastery' },
@@ -31,7 +31,7 @@ export const REALMS = [
 ];
 
 // Fantasy & Meme Ranks Progression
-export const RANKS = [
+const RANKS = [
   { rank: 1, title: 'Noob of the Cursor', minXP: 0, maxXP: 100, icon: '📜', badge: 'Mouse Clicker' },
   { rank: 2, title: 'Squire of the Shortcut', minXP: 100, maxXP: 250, icon: '🐕', badge: 'Doge Apprentice' },
   { rank: 3, title: 'Knight of the Keymap', minXP: 250, maxXP: 500, icon: '🐱', badge: 'PopCat Striker' },
@@ -46,7 +46,7 @@ export const RANKS = [
   { rank: 12, title: 'Supreme GigaChad Emperor', minXP: 6500, maxXP: Infinity, icon: '🗿', badge: 'GigaChad Emperor' }
 ];
 
-export function getRankForXP(xp) {
+function getRankForXP(xp) {
   for (let i = RANKS.length - 1; i >= 0; i--) {
     if (xp >= RANKS[i].minXP) {
       return RANKS[i];
@@ -56,7 +56,7 @@ export function getRankForXP(xp) {
 }
 
 // Main Shortcut Quest Registry (Meme Infused!)
-export const SHORTCUTS = [
+const SHORTCUTS = [
   // Realm I: iron_tabs
   {
     id: 'close_tab',
@@ -520,14 +520,14 @@ export const SHORTCUTS = [
   }
 ];
 
-export function getShortcutsForRealm(realmId) {
+function getShortcutsForRealm(realmId) {
   return SHORTCUTS.filter(s => s.realm === realmId);
 }
 
 /**
  * Checks if a keyboard event matches the target quest for the selected OS.
  */
-export function matchesShortcut(event, quest, currentOS) {
+function matchesShortcut(event, quest, currentOS) {
   const req = quest.keys[currentOS] || quest.keys.windows;
   const isMac = currentOS === 'mac';
 
@@ -620,3 +620,15 @@ export function matchesShortcut(event, quest, currentOS) {
   // Finally check if the key matches
   return checkKey(req.key);
 }
+
+
+// Classic-script globals (file:// cannot load ES modules)
+window.GoCShortcuts = {
+  detectOS,
+  REALMS,
+  RANKS,
+  getRankForXP,
+  SHORTCUTS,
+  getShortcutsForRealm,
+  matchesShortcut
+};

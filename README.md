@@ -59,9 +59,12 @@ A dark, dramatic medieval-fantasy gamified trainer designed to forge muscle memo
 
 ## 🚀 How to Run Locally
 
-### Option 1: Direct in Browser (Simplest)
-Since ES Modules are used, run a lightweight local static server in the project folder:
+**Do not double-click `index.html`.** Chrome opens that as `file://`, which breaks script loading / Keyboard Lock. Enter will not start the game reliably.
 
+### Windows (recommended)
+Double-click **`run.bat`** in this folder, then use the browser window it opens at `http://localhost:8080/`.
+
+### Manual static server
 ```bash
 # Using Python 3
 python -m http.server 8080
@@ -72,7 +75,7 @@ npx serve .
 # Or using VS Code Live Server extension
 ```
 
-Then open `http://localhost:8080` in your Google Chrome desktop browser.
+Then open `http://localhost:8080` in Google Chrome.
 
 ---
 

@@ -6,7 +6,7 @@
  */
 
 // Visual Picture Meme definitions (Rendered with pure SVG and CSS meme graphics)
-export const MEME_PICTURES = {
+const MEME_PICTURES = {
   doge: {
     id: 'doge',
     title: 'Doge - Much Chrome',
@@ -275,7 +275,7 @@ export const MEME_PICTURES = {
   }
 };
 
-export class BrowserSimulator {
+class BrowserSimulator {
   constructor(containerEl) {
     this.container = containerEl;
     this.tabs = [
@@ -1784,3 +1784,8 @@ export class BrowserSimulator {
     return 'Performance panel opened!';
   }
 }
+
+
+// Classic-script globals (file:// cannot load ES modules)
+window.MEME_PICTURES = MEME_PICTURES;
+window.BrowserSimulator = BrowserSimulator;

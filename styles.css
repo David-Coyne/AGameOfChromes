@@ -2901,3 +2901,79 @@ body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/* ===== file:// double-click gate ===== */
+.file-protocol-banner {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background:
+    radial-gradient(ellipse at 50% 20%, rgba(163, 22, 33, 0.35), transparent 55%),
+    linear-gradient(160deg, #0a0c10 0%, #1a1020 50%, #0a0c10 100%);
+}
+.file-protocol-banner[hidden] {
+  display: none !important;
+}
+html.goc-file-protocol {
+  overflow: hidden;
+}
+.file-protocol-card {
+  max-width: 34rem;
+  width: 100%;
+  background: #181d2a;
+  border: 2px solid var(--gold-primary, #d4af37);
+  border-radius: 12px;
+  padding: 1.75rem 1.5rem 1.5rem;
+  color: #f2e6cb;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75);
+  font-family: var(--font-body, system-ui, sans-serif);
+}
+.file-protocol-crest {
+  font-size: 2.5rem;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+.file-protocol-card h1 {
+  font-family: var(--font-title, Georgia, serif);
+  font-size: 1.45rem;
+  color: var(--gold-light, #fbe282);
+  text-align: center;
+  margin: 0 0 0.85rem;
+}
+.file-protocol-card p,
+.file-protocol-card li {
+  line-height: 1.5;
+  font-size: 0.95rem;
+  color: #d7d2c4;
+}
+.file-protocol-card code {
+  font-family: var(--font-mono, 'Fira Code', monospace);
+  color: #00e5ff;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+.file-protocol-steps {
+  margin-top: 1rem;
+  color: #fbe282 !important;
+}
+.file-protocol-card ol {
+  margin: 0.4rem 0 1rem 1.2rem;
+  padding: 0;
+}
+.file-protocol-why {
+  font-size: 0.82rem !important;
+  opacity: 0.85;
+}
+.file-protocol-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.25rem;
+}
+.file-protocol-actions .btn-primary {
+  cursor: pointer;
+}

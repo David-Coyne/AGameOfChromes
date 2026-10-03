@@ -3,10 +3,29 @@
  * Integrates procedural audio, Iron Browser simulation, shortcut interception,
  * Keyboard Lock API (Fullscreen Armor), welcome modal, daily streak tracking,
  * fantasy rank progression, per-shortcut mastery, achievements, and performance stats.
+ *
+ * Loaded as a classic script (not type=module) so file:// double-click works.
+ * Depends on shortcuts.js + browser-sim.js globals attached to window.
  */
 
-import { detectOS, RANKS, getRankForXP, SHORTCUTS, REALMS, getShortcutsForRealm, matchesShortcut } from './shortcuts.js';
-import { BrowserSimulator } from './browser-sim.js';
+(function () {
+  'use strict';
+
+  const {
+    detectOS,
+    RANKS,
+    getRankForXP,
+    SHORTCUTS,
+    REALMS,
+    getShortcutsForRealm,
+    matchesShortcut
+  } = window.GoCShortcuts || {};
+  const BrowserSimulator = window.BrowserSimulator;
+
+  if (!detectOS || !BrowserSimulator || !SHORTCUTS) {
+    console.error('A Game of Chromes: missing GoCShortcuts / BrowserSimulator. Load shortcuts.js and browser-sim.js before app.js.');
+    return;
+  }
 
 // ==========================================
 // ACHIEVEMENT DEFINITIONS
@@ -262,6 +281,10 @@ class GameOfChromesApp {
    */
   confirmStartModal({ fullscreen = true } = {}) {
     if (this._welcomeConfirmed) return;
+    // Prefer run.bat / localhost — block start while the file:// instruction banner is visible
+    if (window.__GOC_IS_FILE__ && document.documentElement.classList.contains('goc-file-protocol')) {
+      return;
+    }
     if (!this.dom.welcomeModal?.classList.contains('show')) return;
 
     this._welcomeConfirmed = true;
@@ -1418,3 +1441,5 @@ if (document.readyState === 'loading') {
 } else {
   bootGameOfChromes();
 }
+
+})();
