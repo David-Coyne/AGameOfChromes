@@ -86,6 +86,18 @@ const KEYBOARD_LOCK_QUEST_IDS = new Set([
   'inspect_element'
 ]);
 
+function isConfirmKey(event) {
+  const key = event.key || '';
+  const code = event.code || '';
+  return key === 'Enter' || key === ' ' || code === 'Enter' || code === 'NumpadEnter' || code === 'Space';
+}
+
+function isCancelKey(event) {
+  const key = event.key || '';
+  const code = event.code || '';
+  return key === 'Escape' || code === 'Escape';
+}
+
 class GameOfChromesApp {
   constructor() {
     this.currentOS = detectOS();
@@ -104,6 +116,7 @@ class GameOfChromesApp {
       && !!navigator.keyboard
       && typeof navigator.keyboard.lock === 'function';
     this.isTransitioning = false; // Guard against rapid-mash exploit
+    this._armorToggleInFlight = false; // Prevent Enter keydown+button click double-toggle
 
     // Performance Stats
     this.sessionCorrect = 0;
@@ -318,7 +331,28 @@ class GameOfChromesApp {
     }
   }
 
+  blurActiveControl() {
+    const el = document.activeElement;
+    if (el && el !== document.body && typeof el.blur === 'function') {
+      el.blur();
+    }
+  }
+
+  async enterFullscreenArmorFromGesture() {
+    // Used by welcome Enter / Fullscreen button — never toggle OFF if already fullscreen
+    if (document.fullscreenElement) {
+      if (!this.keyboardLockActive) {
+        await this.engageKeyboardLock();
+        this.updateArmorButtonUI(true);
+      }
+      return;
+    }
+    await this.toggleFullscreenArmor();
+  }
+
   async toggleFullscreenArmor() {
+    if (this._armorToggleInFlight) return;
+    this._armorToggleInFlight = true;
     try {
       if (!document.fullscreenElement) {
         // Must be JS-initiated fullscreen — user F11 fullscreen cannot use Keyboard Lock
@@ -357,6 +391,8 @@ class GameOfChromesApp {
       this.updateArmorButtonUI(this.isFullscreenArmor);
       this.dom.questFeedback.textContent = '🛡️ Tip: Click Fullscreen Mode (user gesture + secure context) to capture F11, F12, and Ctrl+W.';
       this.dom.questFeedback.className = 'quest-feedback error';
+    } finally {
+      this._armorToggleInFlight = false;
     }
   }
 
@@ -420,13 +456,15 @@ class GameOfChromesApp {
     // Welcome Modal Buttons
     this.dom.welcomeFullscreenBtn?.addEventListener('click', () => {
       this.dom.welcomeModal?.classList.remove('show');
-      this.toggleFullscreenArmor();
+      this.blurActiveControl();
+      this.enterFullscreenArmorFromGesture();
       window.soundEngine.playClick();
     });
 
     // BUG FIX: welcomeWindowedBtn was missing from this.dom
     this.dom.welcomeWindowedBtn?.addEventListener('click', () => {
       this.dom.welcomeModal?.classList.remove('show');
+      this.blurActiveControl();
       window.soundEngine.playClick();
     });
 
@@ -479,6 +517,7 @@ class GameOfChromesApp {
     // Modal Close Button
     this.dom.modalCloseBtn?.addEventListener('click', () => {
       this.dom.modalBackdrop.classList.remove('show');
+      this.blurActiveControl();
       window.soundEngine.playClick();
     });
 
@@ -620,30 +659,38 @@ class GameOfChromesApp {
 
     // Check if Welcome Modal is active
     if (this.dom.welcomeModal && this.dom.welcomeModal.classList.contains('show')) {
-      if (key === 'Enter' || key === ' ') {
+      if (isConfirmKey(event)) {
+        // preventDefault stops focused "Enter Fullscreen" button from also clicking
+        // (that double-fired toggleFullscreenArmor → enter then immediately exit)
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         this.dom.welcomeModal.classList.remove('show');
-        this.toggleFullscreenArmor();
+        this.blurActiveControl();
+        this.enterFullscreenArmorFromGesture();
         window.soundEngine.playClick();
         return;
       }
-      if (key === 'Escape') {
+      if (isCancelKey(event)) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         this.dom.welcomeModal.classList.remove('show');
+        this.blurActiveControl();
         window.soundEngine.playClick();
         return;
       }
       return;
     }
 
-    // Check if Prize / Rank Promotion Modal is active
+    // Check if Prize / Rank Promotion Modal is active (Claim Honor)
     if (this.dom.modalBackdrop && this.dom.modalBackdrop.classList.contains('show')) {
-      if (key === 'Enter' || key === ' ' || key === 'Escape') {
+      if (isConfirmKey(event) || isCancelKey(event)) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         this.dom.modalBackdrop.classList.remove('show');
+        this.blurActiveControl();
         window.soundEngine.playClick();
         return;
       }
@@ -652,10 +699,12 @@ class GameOfChromesApp {
 
     // Check if Stats Modal is active
     if (this.dom.statsModal && this.dom.statsModal.classList.contains('show')) {
-      if (key === 'Escape') {
+      if (isCancelKey(event) || isConfirmKey(event)) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         this.dom.statsModal.classList.remove('show');
+        this.blurActiveControl();
         window.soundEngine.playClick();
         return;
       }
@@ -664,10 +713,12 @@ class GameOfChromesApp {
 
     // Check if Grimoire Modal is active
     if (this.dom.grimoireModal && this.dom.grimoireModal.classList.contains('show')) {
-      if (key === 'Escape') {
+      if (isCancelKey(event)) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         this.dom.grimoireModal.classList.remove('show');
+        this.blurActiveControl();
         window.soundEngine.playClick();
       }
       // Block quest input while browsing the Grimoire (match other modals)
