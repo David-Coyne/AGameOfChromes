@@ -45,6 +45,10 @@ try {
                 }
 
                 $response.ContentType = $mime
+                # Prevent stale app.js/index.html from making Enter look broken after git pull
+                $response.Headers.Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                $response.Headers.Set("Pragma", "no-cache")
+                $response.Headers.Set("Expires", "0")
                 $response.ContentLength64 = $bytes.Length
                 $response.OutputStream.Write($bytes, 0, $bytes.Length)
             } else {

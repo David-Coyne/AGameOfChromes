@@ -3,14 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
   <title>A Game of Chromes - The Iron Shortcut Trainer</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=localhost-enter-2">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
   <script>
-    // Detect double-clicked index.html (file://) ASAP — Chrome blocks ES modules there.
+    // Build stamp — DevTools console must show this after hard refresh.
     window.__GOC_IS_FILE__ = (location.protocol === 'file:');
-    window.__GOC_BUILD__ = 'master-file-protocol-v1';
-    try { console.info('[A Game of Chromes]', window.__GOC_BUILD__, location.protocol); } catch (e) {}
+    window.__GOC_BUILD__ = 'master-localhost-enter-2';
+    try { console.info('[A Game of Chromes]', window.__GOC_BUILD__, location.href); } catch (e) {}
+
+    /**
+     * Single confirm path for welcome modal — called by Enter (capture) and button onclick.
+     * Must never silently no-op when the welcome modal is visible on http://.
+     */
+    window.gocConfirmWelcome = function (fullscreen) {
+      try {
+        if (window.__GOC_IS_FILE__ && document.documentElement.classList.contains('goc-file-protocol')) {
+          return false;
+        }
+        var modal = document.getElementById('welcomeModal');
+        if (!modal || !modal.classList.contains('show')) return false;
+
+        if (window.app && typeof window.app.confirmStartModal === 'function') {
+          window.app.confirmStartModal({ fullscreen: !!fullscreen });
+          // If app path no-op'd, fall through to raw dismiss
+          if (!modal.classList.contains('show')) return true;
+          if (window.app._welcomeConfirmed) return true;
+        }
+
+        if (window.__gocStart && window.__gocStart.confirmed) return true;
+        if (window.__gocStart) window.__gocStart.confirmed = true;
+        modal.classList.remove('show');
+        if (fullscreen && document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(function () {});
+        }
+        return true;
+      } catch (err) {
+        try { console.error('[A Game of Chromes] gocConfirmWelcome failed', err); } catch (e) {}
+        var m = document.getElementById('welcomeModal');
+        if (m) m.classList.remove('show');
+        return false;
+      }
+    };
+
+    // Highest-priority capture listener — registered before body/scripts exist for later events
+    window.addEventListener('keydown', function (e) {
+      var modal = document.getElementById('welcomeModal');
+      if (!modal || !modal.classList.contains('show')) return;
+      var key = e.key || '';
+      var code = e.code || '';
+      var isEnter = key === 'Enter' || code === 'Enter' || code === 'NumpadEnter';
+      var isEsc = key === 'Escape' || code === 'Escape';
+      if (!isEnter && !isEsc) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+      window.gocConfirmWelcome(isEnter);
+    }, true);
   </script>
 </head>
 <body>
@@ -199,19 +250,24 @@
   </div>
 
   <!-- Initial Fullscreen Entry Modal (Shown when user opens app) -->
-  <div class="modal-backdrop show" id="welcomeModal">
-    <div class="rank-up-card welcome-card">
+  <div class="modal-backdrop show" id="welcomeModal" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
+    <div class="rank-up-card welcome-card" tabindex="-1">
       <div class="rank-crest-large">🐉</div>
-      <h2 class="rank-up-title">ENTER THE IRON ARENA</h2>
+      <h2 class="rank-up-title" id="welcomeTitle">ENTER THE IRON ARENA</h2>
       <p class="rank-up-desc">
         Chrome steals <strong>Ctrl+W</strong>, <strong>F11</strong>, and <strong>F12</strong> in windowed mode.
-        Enter Fullscreen Battle Mode to arm Keyboard Lock so those keys train inside the Iron Browser!
+        Click the button below (or click once in this window, then press <strong>Enter</strong>) to start.
+      </p>
+      <p id="welcomeFocusHint" class="welcome-focus-hint" hidden>
+        Click anywhere in this window first — Chrome still has the address bar focused, so Enter never reaches the game.
       </p>
       <div class="modal-actions-row">
-        <button type="button" class="btn-primary modal-action-btn" id="welcomeFullscreenBtn" autofocus>
+        <button type="button" class="btn-primary modal-action-btn" id="welcomeFullscreenBtn" autofocus tabindex="0"
+          onclick="window.gocConfirmWelcome(true); return false;">
           🛡️ Enter Fullscreen Mode <span class="enter-key-badge">↵ Enter</span>
         </button>
-        <button type="button" class="btn-secondary modal-action-btn" id="welcomeWindowedBtn">
+        <button type="button" class="btn-secondary modal-action-btn" id="welcomeWindowedBtn" tabindex="0"
+          onclick="window.gocConfirmWelcome(false); return false;">
           🗡️ Continue Windowed <span class="enter-key-badge">Esc</span>
         </button>
       </div>
@@ -301,10 +357,10 @@
     </div>
   </div>
 
-  <!-- Scripts: classic order so file:// AND http:// both boot (ES modules are CORS-blocked on file://) -->
-  <script src="shortcuts.js"></script>
-  <script src="browser-sim.js"></script>
-  <script src="audio.js"></script>
+  <!-- Scripts: classic order so file:// AND http:// both boot -->
+  <script src="shortcuts.js?v=localhost-enter-2"></script>
+  <script src="browser-sim.js?v=localhost-enter-2"></script>
+  <script src="audio.js?v=localhost-enter-2"></script>
   <script>
     (function () {
       // file:// gate — full-screen instructions; classic scripts still load underneath
@@ -327,6 +383,7 @@
       window.__gocStart = {
         confirmed: false,
         pendingFullscreen: null,
+        _focusTimer: null,
         armFocus: function () {
           if (this.confirmed) return;
           if (window.__GOC_IS_FILE__ && document.documentElement.classList.contains('goc-file-protocol')) return;
@@ -338,51 +395,48 @@
           try { btn.focus({ preventScroll: true }); } catch (e) {
             try { btn.focus(); } catch (e2) {}
           }
+          var hint = document.getElementById('welcomeFocusHint');
+          if (hint) {
+            // document.hasFocus() is false when omnibox/chrome UI owns keyboard
+            hint.hidden = document.hasFocus();
+          }
+        },
+        startFocusPulse: function () {
+          var self = this;
+          if (self._focusTimer) return;
+          var n = 0;
+          self._focusTimer = setInterval(function () {
+            if (self.confirmed || n++ > 60) {
+              clearInterval(self._focusTimer);
+              self._focusTimer = null;
+              return;
+            }
+            self.armFocus();
+          }, 50);
         },
         confirm: function (fullscreen) {
-          if (this.confirmed) return;
-          // Block start while the file:// instruction banner is up
-          if (window.__GOC_IS_FILE__ && document.documentElement.classList.contains('goc-file-protocol')) return;
-          var modal = document.getElementById('welcomeModal');
-          if (!modal || !modal.classList.contains('show')) return;
-          if (window.app && typeof window.app.confirmStartModal === 'function') {
-            window.app.confirmStartModal({ fullscreen: !!fullscreen });
-            return;
-          }
-          this.confirmed = true;
-          modal.classList.remove('show');
-          this.pendingFullscreen = !!fullscreen;
-          if (fullscreen && document.documentElement.requestFullscreen) {
-            document.documentElement.requestFullscreen().catch(function () {});
-          }
+          return window.gocConfirmWelcome(!!fullscreen);
         }
       };
 
-      function arm() { window.__gocStart.armFocus(); }
+      function arm() {
+        window.__gocStart.armFocus();
+        window.__gocStart.startFocusPulse();
+      }
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', arm);
       } else {
         arm();
       }
       window.addEventListener('load', arm);
-      // First click/tap pulls focus out of the omnibox so Enter reaches the page
-      window.addEventListener('pointerdown', arm, true);
-
-      window.addEventListener('keydown', function (e) {
-        var modal = document.getElementById('welcomeModal');
-        if (!modal || !modal.classList.contains('show') || window.__gocStart.confirmed) return;
-        var key = e.key || '';
-        var code = e.code || '';
-        var isEnter = key === 'Enter' || code === 'Enter' || code === 'NumpadEnter';
-        var isEsc = key === 'Escape' || code === 'Escape';
-        if (!isEnter && !isEsc) return;
-        e.preventDefault();
-        e.stopPropagation();
-        if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
-        window.__gocStart.confirm(isEnter);
+      window.addEventListener('pointerdown', function () {
+        var hint = document.getElementById('welcomeFocusHint');
+        if (hint) hint.hidden = true;
+        window.__gocStart.armFocus();
       }, true);
+      window.addEventListener('focus', function () { window.__gocStart.armFocus(); });
     })();
   </script>
-  <script src="app.js"></script>
+  <script src="app.js?v=localhost-enter-2"></script>
 </body>
 </html>

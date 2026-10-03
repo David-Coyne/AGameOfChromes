@@ -247,12 +247,12 @@ class GameOfChromesApp {
     this.dom.modeBtnCombat?.classList.remove('btn-primary');
 
     // After reload, Chrome often leaves focus in the omnibox — page never sees Enter.
-    // Pull focus onto the start button so Enter reaches our confirm path.
     this.armWelcomeFocus();
     requestAnimationFrame(() => this.armWelcomeFocus());
     window.addEventListener('load', () => this.armWelcomeFocus(), { once: true });
+    if (window.__gocStart?.startFocusPulse) window.__gocStart.startFocusPulse();
 
-    // Classic-script fallback may have confirmed before the module finished booting
+    // Classic-script fallback may have confirmed before app finished booting
     if (window.__gocStart?.confirmed && window.__gocStart.pendingFullscreen != null) {
       const wantFs = !!window.__gocStart.pendingFullscreen;
       window.__gocStart.pendingFullscreen = null;
@@ -264,6 +264,10 @@ class GameOfChromesApp {
   /** Move keyboard focus into the page so Enter is not swallowed by the browser chrome. */
   armWelcomeFocus() {
     if (this._welcomeConfirmed) return;
+    if (window.__gocStart?.armFocus) {
+      window.__gocStart.armFocus();
+      return;
+    }
     if (!this.dom.welcomeModal?.classList.contains('show')) return;
     const btn = this.dom.welcomeFullscreenBtn;
     if (!btn) return;
@@ -285,16 +289,24 @@ class GameOfChromesApp {
     if (window.__GOC_IS_FILE__ && document.documentElement.classList.contains('goc-file-protocol')) {
       return;
     }
-    if (!this.dom.welcomeModal?.classList.contains('show')) return;
+    const modal = this.dom.welcomeModal || document.getElementById('welcomeModal');
+    if (!modal || !modal.classList.contains('show')) return;
 
     this._welcomeConfirmed = true;
     if (window.__gocStart) {
       window.__gocStart.confirmed = true;
       window.__gocStart.pendingFullscreen = null;
+      if (window.__gocStart._focusTimer) {
+        clearInterval(window.__gocStart._focusTimer);
+        window.__gocStart._focusTimer = null;
+      }
     }
 
-    this.dom.welcomeModal.classList.remove('show');
+    modal.classList.remove('show');
     this.blurActiveControl();
+
+    const hint = document.getElementById('welcomeFocusHint');
+    if (hint) hint.hidden = true;
 
     if (fullscreen) {
       this.enterFullscreenArmorFromGesture();
@@ -528,16 +540,24 @@ class GameOfChromesApp {
       window.soundEngine.playClick();
     });
 
-    // Welcome Modal Buttons — same confirm path as Enter / Escape
+    // Welcome Modal Buttons — same confirm path as Enter / Escape / inline onclick
     this.dom.welcomeFullscreenBtn?.addEventListener('click', (e) => {
       e.preventDefault();
-      this.confirmStartModal({ fullscreen: true });
+      if (typeof window.gocConfirmWelcome === 'function') {
+        window.gocConfirmWelcome(true);
+      } else {
+        this.confirmStartModal({ fullscreen: true });
+      }
     });
 
     // BUG FIX: welcomeWindowedBtn was missing from this.dom
     this.dom.welcomeWindowedBtn?.addEventListener('click', (e) => {
       e.preventDefault();
-      this.confirmStartModal({ fullscreen: false });
+      if (typeof window.gocConfirmWelcome === 'function') {
+        window.gocConfirmWelcome(false);
+      } else {
+        this.confirmStartModal({ fullscreen: false });
+      }
     });
 
     // Dedicated Popup App Window Launcher
@@ -618,7 +638,24 @@ class GameOfChromesApp {
       window.soundEngine?.playClick();
     });
 
-    // BUG FIX: Only ONE keydown listener (was duplicate on both window and document)
+    // Dedicated capture-phase welcome Enter (backup if head listener missed)
+    window.addEventListener('keydown', (e) => {
+      if (!this.dom.welcomeModal?.classList.contains('show') || this._welcomeConfirmed) return;
+      const key = e.key || '';
+      const code = e.code || '';
+      const isEnter = key === 'Enter' || code === 'Enter' || code === 'NumpadEnter';
+      const isEsc = key === 'Escape' || code === 'Escape';
+      if (!isEnter && !isEsc) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      if (typeof window.gocConfirmWelcome === 'function') {
+        window.gocConfirmWelcome(isEnter);
+      } else {
+        this.confirmStartModal({ fullscreen: isEnter });
+      }
+    }, { capture: true, passive: false });
+
     window.addEventListener('keydown', (e) => this.handleKeyDown(e), { capture: true, passive: false });
     window.addEventListener('keyup', (e) => this.handleKeyUp(e), { capture: true });
   }
@@ -1431,6 +1468,9 @@ function bootGameOfChromes() {
   if (window.app) return;
   try {
     window.app = new GameOfChromesApp();
+    try {
+      console.info('[A Game of Chromes] app booted', window.__GOC_BUILD__ || '(no build stamp)', location.protocol);
+    } catch (_) {}
   } catch (err) {
     console.error('A Game of Chromes failed to boot:', err);
   }
