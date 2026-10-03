@@ -78,7 +78,7 @@ const KEYBOARD_LOCK_CODES = [
 ];
 
 // Quests whose primary key Chrome intercepts without Keyboard Lock
-const KEYBOARD_LOCK_QUEST_IDS = new Set(['fullscreen_toggle', 'open_devtools']);
+const KEYBOARD_LOCK_QUEST_IDS = new Set(['fullscreen_toggle', 'open_devtools', 'open_downloads']);
 
 class GameOfChromesApp {
   constructor() {
@@ -272,12 +272,19 @@ class GameOfChromesApp {
   getReservedKeyHint(quest) {
     if (!quest || !KEYBOARD_LOCK_QUEST_IDS.has(quest.id)) return null;
     if (this.keyboardLockActive) {
-      return quest.id === 'fullscreen_toggle'
-        ? 'Keyboard Lock armed — press F11 now (sim fullscreen only; game armor stays on).'
-        : 'Keyboard Lock armed — press F12 now (or Ctrl+Shift+I).';
+      if (quest.id === 'fullscreen_toggle') {
+        return 'Keyboard Lock armed — press F11 now (sim fullscreen only; game armor stays on).';
+      }
+      if (quest.id === 'open_downloads') {
+        return 'Keyboard Lock armed — press Ctrl+J (or Cmd+Shift+J) to open Downloads.';
+      }
+      return 'Keyboard Lock armed — press F12 now (or Ctrl+Shift+I).';
     }
     if (quest.id === 'fullscreen_toggle') {
       return 'Enter Fullscreen Mode to capture F11 (Chrome steals F11 for browser fullscreen otherwise).';
+    }
+    if (quest.id === 'open_downloads') {
+      return 'Enter Fullscreen Mode to capture Ctrl+J (Chrome steals it for chrome://downloads otherwise). Or click Strike Blade / keycaps.';
     }
     return 'Enter Fullscreen Mode to capture F12 (Chrome steals F12 for DevTools otherwise). Or use Ctrl+Shift+I.';
   }
@@ -1139,7 +1146,7 @@ class GameOfChromesApp {
 
     setTimeout(() => {
       toast.remove();
-    }, isCritical ? 1500 : 1200);
+    }, isCritical ? 2200 : 2000);
   }
 
   spawnSwordClash() {

@@ -332,7 +332,7 @@ export const SHORTCUTS = [
       windows: { display: ['Ctrl', 'J'], meta: false, ctrl: true, shift: false, alt: false, key: 'j' }
     },
     simAction: 'open_downloads',
-    hint: 'Open downloads using Ctrl + J or Cmd + Shift + J.'
+    hint: 'Open Downloads with Ctrl+J (Fullscreen Mode helps — Chrome steals Ctrl+J otherwise). Mac: Cmd+Shift+J.'
   },
   {
     id: 'toggle_bookmarks_bar',
@@ -562,13 +562,23 @@ export function matchesShortcut(event, quest, currentOS) {
   if (quest.id === 'next_tab' && (pressedKey === 'tab' || pressedCode === 'tab') && primaryModPressed && !shiftPressed && !altPressed) return true;
   if (quest.id === 'prev_tab' && (pressedKey === 'tab' || pressedCode === 'tab') && primaryModPressed && shiftPressed && !altPressed) return true;
 
-  // Alternatives
+    // Alternatives
   if (quest.id === 'reload_page' && (pressedKey === 'f5' || pressedCode === 'f5') && !primaryModPressed && !shiftPressed && !altPressed) return true;
   if (quest.id === 'open_devtools' && checkKey('i') && primaryModPressed && shiftPressed && !altPressed) return true;
   // Mac DevTools: Cmd + Option + I
   if (isMac && quest.id === 'open_devtools' && checkKey('i') && primaryModPressed && altPressed && !shiftPressed) return true;
   // Mac History also accepts Cmd + H in Chrome (in addition to Cmd + Y)
   if (isMac && quest.id === 'history_scroll' && checkKey('h') && primaryModPressed && !shiftPressed && !altPressed) return true;
+  // Downloads: Ctrl+J (Win/Linux) or Cmd+Shift+J (Mac) — explicit so it cannot confuse with Console
+  if (quest.id === 'open_downloads') {
+    if (checkKey('j') && primaryModPressed && !altPressed) {
+      if (isMac) {
+        if (shiftPressed) return true; // Cmd+Shift+J
+      } else if (!shiftPressed) {
+        return true; // Ctrl+J (not Ctrl+Shift+J — that's Console)
+      }
+    }
+  }
 
   // Determine required modifiers
   const reqPrimary = isMac ? !!req.meta : !!req.ctrl;

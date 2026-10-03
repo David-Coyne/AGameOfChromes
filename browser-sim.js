@@ -333,6 +333,7 @@ export class BrowserSimulator {
     this.deviceMode = false;
     this.simFullscreen = false;
     this.downloadsShelfOpen = false;
+    this.downloadsPageOpen = false;
     this.clearDataDialogOpen = false;
     this.sourceOverlayOpen = false;
     this.printOverlayOpen = false;
@@ -394,9 +395,10 @@ export class BrowserSimulator {
     const win = this.container.querySelector('#chromeBrowserWindow');
     if (win) {
       win.appendChild(badge);
+      // Keep on-screen long enough to read (matches ~2.8s CSS animation)
       setTimeout(() => {
         if (badge.parentNode) badge.remove();
-      }, 1250);
+      }, 3000);
     }
   }
 
@@ -490,17 +492,20 @@ export class BrowserSimulator {
           <button class="chrome-find-btn" id="simFindClose">✕</button>
         </div>
 
-        <!-- Downloads shelf -->
+        <!-- Downloads shelf (Chrome bottom bar) -->
         <div class="chrome-downloads-shelf ${this.downloadsShelfOpen ? 'open' : ''}" id="simDownloadsShelf">
           <div class="chrome-dl-item">
             <span class="chrome-dl-icon">📦</span>
             <div class="chrome-dl-meta">
               <strong>meme-pack.zip</strong>
-              <span>2.4 MB • Complete</span>
+              <span>2.4 MB • Show in folder</span>
             </div>
-            <button class="chrome-find-btn" id="simCloseDownloads">✕</button>
+            <button class="chrome-dl-link" id="simOpenDownloadsPage" type="button">Show all</button>
+            <button class="chrome-find-btn" id="simCloseDownloads" type="button">✕</button>
           </div>
         </div>
+
+        ${this.downloadsPageOpen ? this.renderDownloadsPage() : ''}
 
         <!-- Chrome History Side Drawer -->
         <div class="chrome-history-drawer ${this.historyPanelOpen ? 'open' : ''}" id="simHistoryDrawer">
@@ -683,6 +688,48 @@ export class BrowserSimulator {
     return `
       <div class="chrome-save-toast" id="simSaveToast">
         <span>💾</span> Page saved as <strong>shortcut-scroll.html</strong>
+      </div>
+    `;
+  }
+
+  renderDownloadsPage() {
+    const files = [
+      { icon: '📦', name: 'meme-pack.zip', meta: '2.4 MB — Today 10:42 AM', status: 'Complete', progress: 100 },
+      { icon: '🖼️', name: 'doge-wallpaper.png', meta: '1.1 MB — Today 9:15 AM', status: 'Complete', progress: 100 },
+      { icon: '📜', name: 'shortcut-grimoire.pdf', meta: '840 KB — Yesterday', status: 'Complete', progress: 100 },
+      { icon: '⚔️', name: 'iron-browser-installer.exe', meta: '48 MB — This week', status: 'Complete', progress: 100 }
+    ];
+    const rows = files.map(f => `
+      <div class="chrome-dl-page-row">
+        <span class="chrome-dl-page-icon">${f.icon}</span>
+        <div class="chrome-dl-page-info">
+          <div class="chrome-dl-page-name">${f.name}</div>
+          <div class="chrome-dl-page-meta">${f.meta}</div>
+          <div class="chrome-dl-progress-track"><div class="chrome-dl-progress-fill" style="width:${f.progress}%"></div></div>
+        </div>
+        <div class="chrome-dl-page-actions">
+          <span class="chrome-dl-status">${f.status}</span>
+          <button type="button" class="chrome-dl-link">Show in folder</button>
+        </div>
+      </div>
+    `).join('');
+
+    return `
+      <div class="chrome-downloads-page" id="simDownloadsPage">
+        <div class="chrome-dl-page-header">
+          <div class="chrome-dl-page-title-row">
+            <h2>Downloads</h2>
+            <button type="button" class="chrome-find-btn" id="simCloseDownloadsPage" title="Close">✕</button>
+          </div>
+          <div class="chrome-dl-page-search">
+            <span>🔍</span>
+            <input type="text" value="" placeholder="Search downloads" readonly />
+          </div>
+          <div class="chrome-dl-page-url">chrome://downloads</div>
+        </div>
+        <div class="chrome-dl-page-list">
+          ${rows}
+        </div>
       </div>
     `;
   }
@@ -886,6 +933,22 @@ export class BrowserSimulator {
     if (dlClose) {
       dlClose.addEventListener('click', () => {
         this.downloadsShelfOpen = false;
+        this.render();
+      });
+    }
+
+    const openDlPage = this.container.querySelector('#simOpenDownloadsPage');
+    if (openDlPage) {
+      openDlPage.addEventListener('click', () => {
+        this.downloadsPageOpen = true;
+        this.render();
+      });
+    }
+
+    const closeDlPage = this.container.querySelector('#simCloseDownloadsPage');
+    if (closeDlPage) {
+      closeDlPage.addEventListener('click', () => {
+        this.downloadsPageOpen = false;
         this.render();
       });
     }
@@ -1491,9 +1554,29 @@ export class BrowserSimulator {
   }
 
   openDownloadsAnim() {
+    // Chrome-like: open chrome://downloads page + bottom download shelf
+    this.downloadsPageOpen = true;
     this.downloadsShelfOpen = true;
+    this.sourceOverlayOpen = false;
+    this.printOverlayOpen = false;
+    this.clearDataDialogOpen = false;
+    this.historyPanelOpen = false;
+    this.findOverlayOpen = false;
+    this.findHighlightActive = false;
+
+    // Reflect chrome://downloads in the omnibox
+    const active = this.getActiveTab();
+    if (active) {
+      active._prevUrl = active._prevUrl || active.url;
+      active._prevTitle = active._prevTitle || active.title;
+      active.url = 'chrome://downloads';
+      active.title = 'Downloads';
+      active.icon = '📦';
+    }
+
     this.render();
-    this.showHeroBadge('DOWNLOADS SHELF!', 'Plundered loot visible', '📦');
+    this.triggerWarpSweep();
+    this.showHeroBadge('DOWNLOADS OPENED!', 'chrome://downloads — treasure vault unlocked', '📦');
     return 'Downloads page opened!';
   }
 
