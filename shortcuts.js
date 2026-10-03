@@ -424,7 +424,7 @@ export const SHORTCUTS = [
       windows: { display: ['F11'], meta: false, ctrl: false, shift: false, alt: false, key: 'f11' }
     },
     simAction: 'toggle_fullscreen',
-    hint: 'Toggle fullscreen mode with F11.'
+    hint: 'Press F11 after entering Fullscreen Mode (Chrome steals F11 otherwise).'
   },
   {
     id: 'jump_to_tab',
@@ -456,7 +456,7 @@ export const SHORTCUTS = [
       windows: { display: ['F12'], meta: false, ctrl: false, shift: false, alt: false, key: 'f12' }
     },
     simAction: 'open_devtools',
-    hint: 'Press F12 or Ctrl+Shift+I to open DevTools.'
+    hint: 'Press F12 after Fullscreen Mode (or Ctrl+Shift+I anytime).'
   },
   {
     id: 'open_console',

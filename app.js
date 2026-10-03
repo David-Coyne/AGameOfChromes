@@ -66,6 +66,20 @@ function localDateString(date = new Date()) {
   return `${y}-${m}-${d}`;
 }
 
+// Keys Chrome/OS normally steals — must be listed for Keyboard Lock (code values)
+const KEYBOARD_LOCK_CODES = [
+  // Letter/digit accelerators (Ctrl+W family, etc.)
+  'KeyW', 'KeyT', 'KeyN', 'KeyH', 'KeyL', 'KeyD', 'KeyR', 'KeyS', 'KeyP',
+  'KeyJ', 'KeyU', 'KeyB', 'KeyF', 'KeyE', 'KeyM', 'KeyC', 'KeyY', 'KeyI',
+  'Digit0', 'Digit1',
+  'Tab', 'BracketLeft', 'BracketRight', 'equal', 'Minus', 'Delete', 'Backspace',
+  // Function keys Chrome owns in windowed mode (F11 fullscreen, F12 DevTools, F5 reload)
+  'F5', 'F11', 'F12'
+];
+
+// Quests whose primary key Chrome intercepts without Keyboard Lock
+const KEYBOARD_LOCK_QUEST_IDS = new Set(['fullscreen_toggle', 'open_devtools']);
+
 class GameOfChromesApp {
   constructor() {
     this.currentOS = detectOS();
@@ -79,6 +93,10 @@ class GameOfChromesApp {
     this.combatTimeLeft = 60;
     this.combatScore = 0;
     this.isFullscreenArmor = false;
+    this.keyboardLockActive = false;
+    this.keyboardLockSupported = typeof navigator !== 'undefined'
+      && !!navigator.keyboard
+      && typeof navigator.keyboard.lock === 'function';
     this.isTransitioning = false; // Guard against rapid-mash exploit
 
     // Performance Stats
@@ -199,35 +217,121 @@ class GameOfChromesApp {
     });
   }
 
+  supportsKeyboardLock() {
+    return this.keyboardLockSupported;
+  }
+
+  async engageKeyboardLock() {
+    if (!this.supportsKeyboardLock()) {
+      this.keyboardLockActive = false;
+      return { ok: false, reason: 'unsupported' };
+    }
+    if (!document.fullscreenElement) {
+      this.keyboardLockActive = false;
+      return { ok: false, reason: 'not-fullscreen' };
+    }
+    try {
+      await navigator.keyboard.lock(KEYBOARD_LOCK_CODES);
+      this.keyboardLockActive = true;
+      return { ok: true };
+    } catch (err) {
+      console.warn('Keyboard Lock failed:', err);
+      this.keyboardLockActive = false;
+      return { ok: false, reason: 'denied', error: err };
+    }
+  }
+
+  releaseKeyboardLock() {
+    try {
+      if (navigator.keyboard && typeof navigator.keyboard.unlock === 'function') {
+        navigator.keyboard.unlock();
+      }
+    } catch (err) {
+      console.warn('Keyboard unlock failed:', err);
+    }
+    this.keyboardLockActive = false;
+  }
+
+  updateArmorButtonUI(active) {
+    if (!this.dom.armorToggleBtn) return;
+    if (active) {
+      this.dom.armorToggleBtn.innerHTML = this.keyboardLockActive
+        ? '🛡️ Armor Locked'
+        : '🛡️ Fullscreen Active';
+      this.dom.armorToggleBtn.classList.add('armor-active');
+      this.dom.armorToggleBtn.title = this.keyboardLockActive
+        ? 'Keyboard Lock active — F11, F12, Ctrl+W and other reserved keys go to the game. Click to exit.'
+        : 'Fullscreen active, but Keyboard Lock is unavailable — F11/F12 may still be stolen by Chrome. Click to exit.';
+    } else {
+      this.dom.armorToggleBtn.innerHTML = '🛡️ Fullscreen Mode';
+      this.dom.armorToggleBtn.classList.remove('armor-active');
+      this.dom.armorToggleBtn.title = 'Enter Fullscreen Armor to capture F11, F12, Ctrl+W and other reserved Chrome keys';
+    }
+  }
+
+  getReservedKeyHint(quest) {
+    if (!quest || !KEYBOARD_LOCK_QUEST_IDS.has(quest.id)) return null;
+    if (this.keyboardLockActive) {
+      return quest.id === 'fullscreen_toggle'
+        ? 'Keyboard Lock armed — press F11 now (sim fullscreen only; game armor stays on).'
+        : 'Keyboard Lock armed — press F12 now (or Ctrl+Shift+I).';
+    }
+    if (quest.id === 'fullscreen_toggle') {
+      return 'Enter Fullscreen Mode to capture F11 (Chrome steals F11 for browser fullscreen otherwise).';
+    }
+    return 'Enter Fullscreen Mode to capture F12 (Chrome steals F12 for DevTools otherwise). Or use Ctrl+Shift+I.';
+  }
+
+  applyQuestFeedbackHint(quest) {
+    const reservedHint = this.getReservedKeyHint(quest);
+    if (reservedHint && !this.keyboardLockActive) {
+      this.dom.questFeedback.textContent = `🛡️ ${reservedHint}`;
+      this.dom.questFeedback.className = 'quest-feedback';
+    } else {
+      this.dom.questFeedback.textContent = quest.hint;
+      this.dom.questFeedback.className = 'quest-feedback';
+    }
+  }
+
   async toggleFullscreenArmor() {
     try {
       if (!document.fullscreenElement) {
+        // Must be JS-initiated fullscreen — user F11 fullscreen cannot use Keyboard Lock
         await document.documentElement.requestFullscreen();
         this.isFullscreenArmor = true;
-        if (navigator.keyboard && navigator.keyboard.lock) {
-          await navigator.keyboard.lock(['KeyW', 'KeyT', 'KeyN', 'KeyH', 'KeyL', 'KeyD', 'Tab', 'KeyR', 'KeyS', 'KeyP', 'KeyJ', 'KeyU', 'KeyB', 'KeyF', 'KeyE', 'KeyM', 'KeyC']);
-          console.log("Keyboard Lock engaged for browser shortcuts.");
+        const lockResult = await this.engageKeyboardLock();
+        this.updateArmorButtonUI(true);
+
+        if (lockResult.ok) {
+          this.dom.questFeedback.textContent = '🛡️ Fullscreen Armor locked! F11, F12, Ctrl+W and other reserved keys are captured by the game.';
+          this.dom.questFeedback.className = 'quest-feedback success';
+        } else if (lockResult.reason === 'unsupported') {
+          this.dom.questFeedback.textContent = '🛡️ Fullscreen on, but this browser has no Keyboard Lock — F11/F12 may still open Chrome UI. Use Chrome on https/localhost.';
+          this.dom.questFeedback.className = 'quest-feedback error';
+        } else {
+          this.dom.questFeedback.textContent = '🛡️ Fullscreen on, but Keyboard Lock was denied — allow keyboard lock / retry the Fullscreen button to capture F11/F12.';
+          this.dom.questFeedback.className = 'quest-feedback error';
         }
-        if (this.dom.armorToggleBtn) {
-          this.dom.armorToggleBtn.innerHTML = '🛡️ Fullscreen Active';
-          this.dom.armorToggleBtn.classList.add('armor-active');
+        // Refresh hint if current quest needs lock
+        const quest = this.getCurrentQuest();
+        if (KEYBOARD_LOCK_QUEST_IDS.has(quest?.id) && lockResult.ok) {
+          this.applyQuestFeedbackHint(quest);
         }
-        this.dom.questFeedback.textContent = '🛡️ Fullscreen Mode Active! Browser shortcuts are locked to the game.';
-        this.dom.questFeedback.className = 'quest-feedback success';
       } else {
+        this.releaseKeyboardLock();
         await document.exitFullscreen();
-        if (navigator.keyboard && navigator.keyboard.unlock) {
-          navigator.keyboard.unlock();
-        }
         this.isFullscreenArmor = false;
-        if (this.dom.armorToggleBtn) {
-          this.dom.armorToggleBtn.innerHTML = '🛡️ Fullscreen Mode';
-          this.dom.armorToggleBtn.classList.remove('armor-active');
-        }
+        this.updateArmorButtonUI(false);
+        const quest = this.getCurrentQuest();
+        if (quest) this.applyQuestFeedbackHint(quest);
       }
     } catch (err) {
-      console.warn("Fullscreen/KeyboardLock error:", err);
-      this.dom.questFeedback.textContent = '🛡️ Tip: Use Fullscreen mode to practice all shortcuts including Ctrl+W safely!';
+      console.warn('Fullscreen/KeyboardLock error:', err);
+      this.releaseKeyboardLock();
+      this.isFullscreenArmor = !!document.fullscreenElement;
+      this.updateArmorButtonUI(this.isFullscreenArmor);
+      this.dom.questFeedback.textContent = '🛡️ Tip: Click Fullscreen Mode (user gesture + secure context) to capture F11, F12, and Ctrl+W.';
+      this.dom.questFeedback.className = 'quest-feedback error';
     }
   }
 
@@ -307,19 +411,21 @@ class GameOfChromesApp {
       window.soundEngine.playClick();
     });
 
-    document.addEventListener('fullscreenchange', () => {
+    document.addEventListener('fullscreenchange', async () => {
       if (!document.fullscreenElement) {
+        // Esc / browser exit — always release lock so keys return to Chrome
+        this.releaseKeyboardLock();
         this.isFullscreenArmor = false;
-        if (this.dom.armorToggleBtn) {
-          this.dom.armorToggleBtn.innerHTML = '🛡️ Fullscreen Mode';
-          this.dom.armorToggleBtn.classList.remove('armor-active');
-        }
+        this.updateArmorButtonUI(false);
+        const quest = this.getCurrentQuest();
+        if (quest) this.applyQuestFeedbackHint(quest);
       } else {
         this.isFullscreenArmor = true;
-        if (this.dom.armorToggleBtn) {
-          this.dom.armorToggleBtn.innerHTML = '🛡️ Fullscreen Active';
-          this.dom.armorToggleBtn.classList.add('armor-active');
+        // Re-engage lock if we entered fullscreen (covers race after requestFullscreen)
+        if (!this.keyboardLockActive) {
+          await this.engageKeyboardLock();
         }
+        this.updateArmorButtonUI(true);
       }
     });
 
@@ -407,8 +513,7 @@ class GameOfChromesApp {
     if (this.dom.targetKeysLabel) {
       this.dom.targetKeysLabel.textContent = `Action: ${quest.actionName}`;
     }
-    this.dom.questFeedback.textContent = quest.hint;
-    this.dom.questFeedback.className = 'quest-feedback';
+    this.applyQuestFeedbackHint(quest);
 
     // Render interactive keycaps
     const req = quest.keys[this.currentOS] || quest.keys.windows;
@@ -592,12 +697,29 @@ class GameOfChromesApp {
       }
     }
 
-    // Also prevent F-key defaults
+    // Function keys Chrome owns unless Keyboard Lock is armed in JS fullscreen
     if (['F5', 'F11', 'F12'].includes(key)) {
       try {
         event.preventDefault();
         event.stopPropagation();
+        // stopImmediatePropagation only helps once Chromium actually delivers the event
+        if (this.keyboardLockActive) {
+          event.stopImmediatePropagation();
+        }
       } catch (err) {}
+
+      // If this is an F11/F12 quest but lock is not armed, steer the player clearly
+      if (
+        !this.keyboardLockActive &&
+        KEYBOARD_LOCK_QUEST_IDS.has(activeQuest?.id) &&
+        !isTargetMatch
+      ) {
+        const hint = this.getReservedKeyHint(activeQuest);
+        if (hint) {
+          this.dom.questFeedback.textContent = `🛡️ ${hint}`;
+          this.dom.questFeedback.className = 'quest-feedback error';
+        }
+      }
     }
 
     // Highlight keycaps visually in real-time
