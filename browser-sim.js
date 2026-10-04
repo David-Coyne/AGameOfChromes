@@ -351,7 +351,21 @@ class BrowserSimulator {
     this.showHeroBadge(text, '', icon);
   }
 
+  clearCinematicOverlays() {
+    if (!this.container) return;
+    this.container.querySelectorAll(
+      '.cinematic-hero-badge, .cinematic-laser-slash, .cinematic-warp-sweep, .chrome-save-toast'
+    ).forEach((el) => el.remove());
+    this.saveToastVisible = false;
+  }
+
+  areSimToastsPaused() {
+    return typeof document !== 'undefined'
+      && document.body?.classList.contains('goc-modal-open');
+  }
+
   triggerLaserSlash() {
+    if (this.areSimToastsPaused()) return;
     const win = this.container.querySelector('#chromeBrowserWindow');
     if (!win) return;
     const slash = document.createElement('div');
@@ -369,6 +383,7 @@ class BrowserSimulator {
   }
 
   triggerWarpSweep() {
+    if (this.areSimToastsPaused()) return;
     const win = this.container.querySelector('#chromeBrowserWindow');
     if (!win) return;
     const sweep = document.createElement('div');
@@ -380,6 +395,7 @@ class BrowserSimulator {
   }
 
   showHeroBadge(title, desc, icon = '⚡') {
+    if (this.areSimToastsPaused()) return;
     const existing = this.container.querySelector('.cinematic-hero-badge');
     if (existing) existing.remove();
 

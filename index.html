@@ -6,12 +6,12 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <title>A Game of Chromes - The Iron Shortcut Trainer</title>
-  <link rel="stylesheet" href="styles.css?v=localhost-enter-2">
+  <link rel="stylesheet" href="styles.css?v=major-fixes-1">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
   <script>
     // Build stamp — DevTools console must show this after hard refresh.
     window.__GOC_IS_FILE__ = (location.protocol === 'file:');
-    window.__GOC_BUILD__ = 'master-localhost-enter-2';
+    window.__GOC_BUILD__ = 'master-major-fixes-1';
     try { console.info('[A Game of Chromes]', window.__GOC_BUILD__, location.href); } catch (e) {}
 
     /**
@@ -256,7 +256,8 @@
       <h2 class="rank-up-title" id="welcomeTitle">ENTER THE IRON ARENA</h2>
       <p class="rank-up-desc">
         Chrome steals <strong>Ctrl+W</strong>, <strong>F11</strong>, and <strong>F12</strong> in windowed mode.
-        Click the button below (or click once in this window, then press <strong>Enter</strong>) to start.
+        Prefer <strong>Fullscreen Armor</strong> so Quest 1 (Close Tab) trains the simulated tab — not this real one.
+        Click below (or click once in this window, then press <strong>Enter</strong>) to start.
       </p>
       <p id="welcomeFocusHint" class="welcome-focus-hint" hidden>
         Click anywhere in this window first — Chrome still has the address bar focused, so Enter never reaches the game.
@@ -358,9 +359,9 @@
   </div>
 
   <!-- Scripts: classic order so file:// AND http:// both boot -->
-  <script src="shortcuts.js?v=localhost-enter-2"></script>
-  <script src="browser-sim.js?v=localhost-enter-2"></script>
-  <script src="audio.js?v=localhost-enter-2"></script>
+  <script src="shortcuts.js?v=major-fixes-1"></script>
+  <script src="browser-sim.js?v=major-fixes-1"></script>
+  <script src="audio.js?v=major-fixes-1"></script>
   <script>
     (function () {
       // file:// gate — full-screen instructions; classic scripts still load underneath
@@ -437,6 +438,6 @@
       window.addEventListener('focus', function () { window.__gocStart.armFocus(); });
     })();
   </script>
-  <script src="app.js?v=localhost-enter-2"></script>
+  <script src="app.js?v=major-fixes-1"></script>
 </body>
 </html>

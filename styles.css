@@ -1449,7 +1449,7 @@ body {
   40%, 60% { transform: translate3d(5px, 0, 0); }
 }
 
-/* Level-Up Modal */
+/* Level-Up Modal — above achievement/sim toast layers */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1458,12 +1458,26 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  z-index: 5000;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.3s ease;
 }
 .modal-backdrop.show { opacity: 1; pointer-events: auto; }
+
+/* While a full modal is open, hide floating toasts / sim cinematics */
+body.goc-modal-open .achievement-toast-container,
+body.goc-modal-open .xp-toast {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+body.goc-modal-open .cinematic-hero-badge,
+body.goc-modal-open .cinematic-laser-slash,
+body.goc-modal-open .cinematic-warp-sweep,
+body.goc-modal-open .chrome-save-toast {
+  display: none !important;
+}
 
 .rank-up-card {
   background: linear-gradient(135deg, #1b202e 0%, #0d1017 100%);
@@ -1574,7 +1588,7 @@ body {
   position: fixed;
   top: 1rem;
   right: 1rem;
-  z-index: 3000;
+  z-index: 4000; /* below .modal-backdrop (5000) so Stats/Grimoire stay readable */
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
